@@ -576,17 +576,21 @@ func _end_round(winner: int, reason: String) -> void:
 		4.0
 	)
 	score_changed.emit()
+	# La racha de derrotas se cuenta UNA vez por ronda, no por jugador.
+	var loser_team := Content.TEAM_T if winner == Content.TEAM_CT else Content.TEAM_CT
+	_loss_streak[loser_team] = int(_loss_streak.get(loser_team, 0)) + 1
+	_loss_streak[winner] = 0
+	var loss_bonus: int = Content.LOSS_BONUS[clampi(
+		int(_loss_streak[loser_team]) - 1, 0, Content.LOSS_BONUS.size() - 1
+	)]
 	for c in all_combatants:
 		if c.is_hostage or c.is_zombie:
 			continue
 		c.frozen = true
 		if c.team == winner:
 			c.money = mini(Content.MAX_MONEY, c.money + Content.WIN_REWARD)
-			_loss_streak[Content.TEAM_T if winner == Content.TEAM_CT else Content.TEAM_CT] += 1
 		else:
-			var streak: int = int(_loss_streak.get(c.team, 0))
-			var bonus: int = Content.LOSS_BONUS[clampi(streak, 0, Content.LOSS_BONUS.size() - 1)]
-			c.money = mini(Content.MAX_MONEY, c.money + bonus)
+			c.money = mini(Content.MAX_MONEY, c.money + loss_bonus)
 	if bomb != null and is_instance_valid(bomb):
 		bomb.stop_defuse()
 	if player:
