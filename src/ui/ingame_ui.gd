@@ -714,7 +714,9 @@ func _on_console_command(text: String) -> void:
 func _run_command(cmd: String, args: Array) -> String:
 	match cmd:
 		"help":
-			return "Comandos: give <arma> | money <n> | god | noclip | kill | heal | bots <n> | wave <n> | nextwave | map <id> | difficulty <0-4> | time <seg> | clear | quit"
+			return "Comandos: give <arma> | money <n> | god | noclip | kill | heal | bots <n> | wave <n> | nextwave | map <id> | difficulty <0-4> | time <seg> | selftest | clear | quit"
+		"selftest":
+			return _run_selftest()
 		"clear":
 			_console_log.clear()
 			return ""
@@ -793,6 +795,73 @@ func _run_command(cmd: String, args: Array) -> String:
 			get_tree().quit()
 			return ""
 	return "Comando desconocido: " + cmd
+
+
+# --- Autodiagnostico -----------------------------------------------------------
+
+
+func _run_selftest() -> String:
+	var problems: Array[String] = []
+	var gun_keys := [
+		"id",
+		"name",
+		"slot",
+		"team",
+		"price",
+		"damage",
+		"rpm",
+		"mag",
+		"reserve",
+		"reload",
+		"spread",
+		"recoil",
+		"range",
+		"auto",
+		"speed_mult",
+		"award",
+		"sound"
+	]
+	var light_keys := ["id", "name", "slot", "team", "price", "damage", "rpm", "speed_mult"]
+	for id in Content.WEAPONS.keys():
+		var def: Dictionary = Content.WEAPONS[id]
+		var slot := int(def.get("slot", 1))
+		var need: Array = light_keys
+		if slot == Content.SLOT_PRIMARY or slot == Content.SLOT_SECONDARY:
+			need = gun_keys
+		for key in need:
+			if not def.has(key):
+				problems.append("ARMA %s sin '%s'" % [id, key])
+		var vm: Dictionary = def.get("vm", {})
+		if not vm.has("kind"):
+			problems.append("ARMA %s sin modelo 3D" % id)
+	for m in Content.MAPS:
+		var lay: Dictionary = Maps.build(String(m.id))
+		if lay.is_empty():
+			problems.append("MAPA %s sin layout" % m.id)
+			continue
+		var zombie_spawns: Array = lay.get("zombie_spawns", [])
+		var spawns_ct: Array = lay.get("spawns_ct", [])
+		var spawns_t: Array = lay.get("spawns_t", [])
+		var sites: Array = lay.get("sites", [])
+		if String(m.mode) == "zombie":
+			if zombie_spawns.is_empty():
+				problems.append("MAPA %s sin spawns de zombie" % m.id)
+			continue
+		if spawns_ct.is_empty():
+			problems.append("MAPA %s sin spawns CT" % m.id)
+		if spawns_t.is_empty():
+			problems.append("MAPA %s sin spawns T" % m.id)
+		if String(m.mode) == "bomb" and sites.size() < 2:
+			problems.append("MAPA %s con menos de 2 sitios" % m.id)
+	if problems.is_empty():
+		return (
+			"SELFTEST OK: %d armas y %d mapas validados."
+			% [Content.WEAPONS.size(), Content.MAPS.size()]
+		)
+	var out := "SELFTEST: %d problemas\n" % problems.size()
+	for line in problems:
+		out += " - " + line + "\n"
+	return out
 
 
 # --- Ayuda ---------------------------------------------------------------------

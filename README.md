@@ -156,7 +156,9 @@ Más detalle en [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md), [`docs/ARMAS.md`
 
 ## 5. Consola de comandos
 
-`` ` `` abre la consola. Comandos: `help`, `give <arma>`, `money <n>`, `god`, `noclip`, `kill`, `heal`, `wave <n>`, `nextwave`, `map <id>`, `difficulty <0-4>`, `time <seg>`, `clear`, `quit`.
+`` ` `` abre la consola. Comandos: `help`, `give <arma>`, `money <n>`, `god`, `noclip`, `kill`, `heal`, `wave <n>`, `nextwave`, `map <id>`, `difficulty <0-4>`, `time <seg>`, `selftest`, `clear`, `quit`.
+
+`selftest` revisa en caliente la base de datos de armas y los layouts de los 10 mapas y avisa de cualquier dato que falte. Es la primera prueba que conviene lanzar si algo no arranca como esperas.
 
 ---
 
