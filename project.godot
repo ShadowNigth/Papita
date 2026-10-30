@@ -7,7 +7,7 @@ config_version=5
 
 config/name="Papita: CS 1.5 Reforged"
 config/description="Reimplementacion completa del clasico CS 1.5 en Godot 4: armas, economia, bombas, bots, modo zombie, mapas originales, materiales PBR procedurales e iluminacion avanzada."
-config/version="1.0.2"
+config/version="1.0.3"
 run/main_scene="res://main.tscn"
 config/features=PackedStringArray("4.4", "Forward Plus")
 config/icon="res://icon.svg"
@@ -29,7 +29,7 @@ window/size/viewport_height=900
 window/size/mode=0
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
-window/vsync/vsync_mode=1
+window/vsync/vsync_mode=0
 
 [gui]
 
@@ -37,18 +37,20 @@ theme/default_font_multichannel_signed_distance_field=true
 
 [physics]
 
-common/physics_ticks_per_second=100
-common/max_physics_steps_per_frame=8
+common/physics_ticks_per_second=60
+common/max_physics_steps_per_frame=4
+common/physics_interpolation=true
 3d/default_gravity=20.0
 
 [rendering]
 
 renderer/rendering_method="forward_plus"
-textures/default_filters/anisotropic_filtering_level=3
+textures/default_filters/anisotropic_filtering_level=2
 anti_aliasing/quality/msaa_3d=1
-anti_aliasing/quality/screen_space_aa=1
-lights_and_shadows/directional_shadow/size=4096
-lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
+anti_aliasing/quality/screen_space_aa=0
+lights_and_shadows/directional_shadow/size=2048
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=1
+lights_and_shadows/positional_shadow/atlas_size=1024
 environment/defaults/default_clear_color=Color(0.05, 0.055, 0.05, 1)
 
 [input_devices]

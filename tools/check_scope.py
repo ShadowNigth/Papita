@@ -163,7 +163,8 @@ JSON ResourceLoader Thread Mutex Callable Signal RID StringName NodePath Rect2i 
 Vector3i Threading GeoNode TweenProperty BoxContainer CheckButton GeometryInstance3D
 InputEventKey InputEventMouseButton Marker3D PhysicsMaterial Sprite3D TabContainer
 TextServer TranslationServer AudioEffectInstance SceneState ViewportTexture StyleBoxTexture
-SpriteBase3D RenderMode CollisionObject3D VisualInstance3D GeometryInstance3D""".split())
+SpriteBase3D RenderMode CollisionObject3D VisualInstance3D GeometryInstance3D
+AStar3D Animation AnimationLibrary AnimationPlayer BoneAttachment3D Mesh Skeleton3D SurfaceTool""".split())
 
 BUILTIN_FUNCS = set("""print print_rich printerr print_debug prints push_error push_warning
 str int float bool String len range randi randf randi_range randf_range randfn abs absi absf

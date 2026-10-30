@@ -7,7 +7,7 @@ extends RefCounted
 
 class_name MaterialLib
 
-const SIZE := 128
+const SIZE := 96
 const SHADER := preload("res://shaders/surface.gdshader")
 
 const PALETTES := {
@@ -113,6 +113,7 @@ const PALETTES := {
 }
 
 static var _cache: Dictionary = {}
+static var _util_cache: Dictionary = {}
 
 # --- API -----------------------------------------------------------------------
 
@@ -371,6 +372,10 @@ static func _generate(kind: String, base: Color, variant: int) -> Dictionary:
 			var rr := rough.get_pixel(x, y).r
 			orm.set_pixel(x, y, Color(ao, rr, metallic_val))
 
+	img.generate_mipmaps()
+	normal.generate_mipmaps()
+	orm.generate_mipmaps()
+
 	return {
 		"albedo": ImageTexture.create_from_image(img),
 		"normal": ImageTexture.create_from_image(normal),
@@ -385,17 +390,25 @@ static func _generate(kind: String, base: Color, variant: int) -> Dictionary:
 	}
 
 
-# --- Utilidades para Fx / props -------------------------------------------------
+# --- Utilidades cacheadas para Fx / props (cero asignaciones en combate) -------
 
 
 static func flat_texture(color: Color, size: int = 8) -> ImageTexture:
+	var key := "flat|%s|%d" % [color.to_html(), size]
+	if _util_cache.has(key):
+		return _util_cache[key]
 	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
 	img.fill(color)
-	return ImageTexture.create_from_image(img)
+	var tex := ImageTexture.create_from_image(img)
+	_util_cache[key] = tex
+	return tex
 
 
 ## Textura radial suave, usada por particulas, humo y flashes.
 static func radial_texture(softness: float = 2.5, size: int = 96) -> ImageTexture:
+	var key := "rad|%.2f|%d" % [softness, size]
+	if _util_cache.has(key):
+		return _util_cache[key]
 	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
 	var c := Vector2(size, size) * 0.5
 	for y in size:
@@ -403,10 +416,15 @@ static func radial_texture(softness: float = 2.5, size: int = 96) -> ImageTextur
 			var d := Vector2(x, y).distance_to(c) / (size * 0.5)
 			var a := clampf(pow(clampf(1.0 - d, 0.0, 1.0), softness), 0.0, 1.0)
 			img.set_pixel(x, y, Color(1, 1, 1, a))
-	return ImageTexture.create_from_image(img)
+	var tex := ImageTexture.create_from_image(img)
+	_util_cache[key] = tex
+	return tex
 
 
 static func spark_texture(size: int = 24) -> ImageTexture:
+	var key := "spark|%d" % size
+	if _util_cache.has(key):
+		return _util_cache[key]
 	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
 	var c := size * 0.5
 	for y in size:
@@ -414,21 +432,30 @@ static func spark_texture(size: int = 24) -> ImageTexture:
 			var d := Vector2(x - c, y - c).length() / c
 			var a := clampf(1.0 - d, 0.0, 1.0)
 			img.set_pixel(x, y, Color(1, 1, 1, a * a))
-	return ImageTexture.create_from_image(img)
+	var tex := ImageTexture.create_from_image(img)
+	_util_cache[key] = tex
+	return tex
 
 
-## Material simple para props chicos (no triplanar, mas barato).
+## Material simple cacheado para props chicos (no triplanar, mas barato).
 static func simple(
 	color: Color, roughness: float = 0.75, metallic: float = 0.0
 ) -> StandardMaterial3D:
+	var key := "smp|%s|%.2f|%.2f" % [color.to_html(), roughness, metallic]
+	if _util_cache.has(key):
+		return _util_cache[key]
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
 	mat.roughness = roughness
 	mat.metallic = metallic
+	_util_cache[key] = mat
 	return mat
 
 
 static func emissive(color: Color, energy: float = 2.0) -> StandardMaterial3D:
+	var key := "emi|%s|%.2f" % [color.to_html(), energy]
+	if _util_cache.has(key):
+		return _util_cache[key]
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
 	mat.emission_enabled = true
@@ -439,4 +466,5 @@ static func emissive(color: Color, energy: float = 2.0) -> StandardMaterial3D:
 		if energy > 4.0
 		else BaseMaterial3D.SHADING_MODE_PER_PIXEL
 	)
+	_util_cache[key] = mat
 	return mat

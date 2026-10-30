@@ -28,6 +28,7 @@ var _ads := false
 var _dead_time := 0.0
 var _last_health := 100.0
 var _last_vm_id := ""
+var _mouse_accum := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -50,8 +51,8 @@ func _build_view() -> void:
 	camera = Camera3D.new()
 	camera.name = "Camera"
 	camera.fov = _base_fov
-	camera.near = 0.04
-	camera.far = 900.0
+	camera.near = 0.015
+	camera.far = 650.0
 	camera.current = true
 	camera.position = Vector3(0, 0, 0.08)
 	camera_rig.add_child(camera)
@@ -64,7 +65,7 @@ func _build_view() -> void:
 	flashlight.spot_range = 22.0
 	flashlight.spot_angle = 28.0
 	flashlight.spot_angle_attenuation = 1.2
-	flashlight.shadow_enabled = true
+	flashlight.shadow_enabled = false
 	flashlight.visible = false
 	flashlight.position = Vector3(0.18, -0.1, 0.2)
 	camera.add_child(flashlight)
@@ -174,6 +175,7 @@ func _look(relative: Vector2) -> void:
 	elif _ads:
 		factor *= 0.8
 	var invert: float = -1.0 if bool(Settings.data.gameplay.get("invert_y", false)) else 1.0
+	_mouse_accum += relative
 	rotate_y(-relative.x * factor)
 	_pitch = clampf(_pitch - relative.y * factor * invert, -1.45, 1.35)
 	_apply_camera_rotation()
@@ -223,7 +225,27 @@ func _sync_viewmodel() -> void:
 	if wanted == _last_vm_id and viewmodel.model != null:
 		return
 	_last_vm_id = wanted
-	viewmodel.set_weapon(current_def())
+	viewmodel.set_weapon(current_def(), silencer_on)
+
+
+func _on_reload_started(duration: float) -> void:
+	if viewmodel:
+		viewmodel.start_reload(duration)
+
+
+func _on_melee_attacked(hit: bool) -> void:
+	if viewmodel:
+		viewmodel.on_knife(hit)
+
+
+func _on_grenade_thrown() -> void:
+	if viewmodel:
+		viewmodel.on_grenade_throw()
+
+
+func _on_silencer_toggled(enabled: bool) -> void:
+	if viewmodel:
+		viewmodel.set_silenced(enabled, true)
 
 
 func _gather_input(_delta: float) -> void:
@@ -304,7 +326,8 @@ func _update_camera(delta: float) -> void:
 	camera.fov = lerpf(camera.fov, _target_fov, clampf(delta * 12.0, 0.0, 1.0))
 	if viewmodel:
 		viewmodel.set_ads(_scoped or _ads, _scoped and zoom > 0.0)
-		var mouse_rel := Vector2.ZERO
+		var mouse_rel := _mouse_accum
+		_mouse_accum = Vector2.ZERO
 		viewmodel.update(delta, velocity, is_on_floor(), crouching, mouse_rel, want_walk)
 
 

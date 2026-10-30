@@ -27,24 +27,18 @@ func _ready() -> void:
 	shape.position = Vector3(0, 0.4, 0)
 	add_child(shape)
 	var def := Content.get_weapon(weapon_id)
-	_model = WeaponModel.build(def)
-	_model.scale = Vector3.ONE * 1.4
-	_model.position = Vector3(0, 0.25, 0)
+	_model = WeaponModel.build(def, false)
+	_model.scale = Vector3.ONE * 1.1
+	_model.position = Vector3(0, 0.08, 0)
 	add_child(_model)
-	var light := OmniLight3D.new()
-	light.light_color = Color(1.0, 0.85, 0.4)
-	light.light_energy = 0.7
-	light.omni_range = 2.5
-	light.position = Vector3(0, 0.5, 0)
-	add_child(light)
 	body_entered.connect(_on_body_entered)
 
 
 func _process(delta: float) -> void:
 	_t += delta
 	if _model:
-		_model.rotation.y += delta * 1.4
-		_model.position.y = 0.25 + sin(_t * 2.0) * 0.05
+		_model.rotation.y += delta * 1.2
+		_model.position.y = 0.08 + sin(_t * 2.0) * 0.03
 
 
 func _on_body_entered(body: Node) -> void:

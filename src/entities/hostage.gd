@@ -28,9 +28,8 @@ func _ready() -> void:
 		actor_model = ActorModel.new()
 		actor_model.name = "Actor"
 		model_container.add_child(actor_model)
-	actor_model.setup(Content.TEAM_T, false, Color(0.72, 0.56, 0.42), 0.95)
+	actor_model.setup(Content.TEAM_T, false, Color(0.72, 0.56, 0.42), 1.0, true)
 	actor_model.set_name_tag("REHEN")
-	actor_model.equip(Content.WEAPONS.knife)
 	actor_model.hide_weapon()
 
 

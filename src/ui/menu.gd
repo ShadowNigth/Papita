@@ -78,15 +78,16 @@ func _build_world() -> void:
 	env.ambient_light_energy = 0.36
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.glow_enabled = true
-	env.glow_intensity = 0.55
-	env.glow_bloom = 0.12
-	env.ssao_enabled = true
-	env.ssao_intensity = 2.0
-	env.ssil_enabled = true
-	env.volumetric_fog_enabled = true
-	env.volumetric_fog_density = 0.02
-	env.volumetric_fog_albedo = Color(0.5, 0.42, 0.3)
-	env.volumetric_fog_length = 40.0
+	env.glow_intensity = 0.45
+	env.glow_bloom = 0.08
+	env.ssao_enabled = false
+	env.ssil_enabled = false
+	env.volumetric_fog_enabled = false
+	env.fog_enabled = true
+	env.fog_light_color = Color(0.22, 0.2, 0.16)
+	env.fog_density = 0.008
+	env.set_meta("volumetric_density", 0.016)
+	env.set_meta("volumetric_color", Color(0.5, 0.42, 0.3))
 	env.adjustment_enabled = true
 	env.adjustment_contrast = 1.08
 	env.adjustment_saturation = 1.05
@@ -94,6 +95,7 @@ func _build_world() -> void:
 	we.environment = env
 	we.add_to_group("world_environment")
 	add_child(we)
+	Settings.apply_environment(env)
 
 	var cam := Camera3D.new()
 	cam.fov = 52.0
@@ -105,12 +107,11 @@ func _build_world() -> void:
 	var spot := SpotLight3D.new()
 	spot.position = Vector3(0.4, 4.2, 2.6)
 	spot.light_color = Color(1.0, 0.86, 0.62)
-	spot.light_energy = 12.0
+	spot.light_energy = 9.5
 	spot.spot_range = 14.0
-	spot.spot_angle = 32.0
+	spot.spot_angle = 36.0
 	spot.spot_angle_attenuation = 0.8
-	spot.shadow_enabled = true
-	spot.light_volumetric_fog_energy = 2.2
+	spot.shadow_enabled = false
 	add_child(spot)
 	var rim := OmniLight3D.new()
 	rim.position = Vector3(-2.6, 2.2, -1.4)
@@ -193,9 +194,24 @@ func _build_world() -> void:
 	_showcase.add_child(ring)
 	_update_showcase("ak47")
 
-	# Particulas de polvo.
+	# Operadores originales de CS 1.5 escoltando el pedestal en el menu principal.
+	var ct_guard := ActorModel.new()
+	ct_guard.position = Vector3(-0.75, 0.0, 0.15)
+	ct_guard.rotation_degrees = Vector3(0.0, 152.0, 0.0)
+	add_child(ct_guard)
+	ct_guard.setup(Content.TEAM_CT, false, Color.WHITE, 1.0, false, 0)
+	ct_guard.equip(Content.get_weapon("m4a1"))
+
+	var t_guard := ActorModel.new()
+	t_guard.position = Vector3(2.05, 0.0, 0.05)
+	t_guard.rotation_degrees = Vector3(0.0, -148.0, 0.0)
+	add_child(t_guard)
+	t_guard.setup(Content.TEAM_T, false, Color.WHITE, 1.0, false, 1)
+	t_guard.equip(Content.get_weapon("ak47"))
+
+	# Particulas de polvo ligeras.
 	var dust := GPUParticles3D.new()
-	dust.amount = 120
+	dust.amount = 42
 	dust.lifetime = 12.0
 	dust.visibility_aabb = AABB(Vector3(-8, -2, -8), Vector3(16, 8, 16))
 	dust.position = Vector3(0, 2.5, 0)
@@ -267,6 +283,10 @@ func _show_screen(id: String) -> void:
 	for key in _screens.keys():
 		(_screens[key] as Control).visible = key == id
 	_current = id
+	if _preview_viewport:
+		_preview_viewport.render_target_update_mode = (
+			SubViewport.UPDATE_WHEN_VISIBLE if id == "arsenal" else SubViewport.UPDATE_DISABLED
+		)
 	AudioBank.play_ui("ui_click", -6.0)
 	if id == "arsenal":
 		_refresh_arsenal()
@@ -764,10 +784,11 @@ func _build_arsenal() -> void:
 	preview.stretch = true
 	right.add_child(preview)
 	var vp := SubViewport.new()
-	vp.size = Vector2i(900, 500)
+	vp.size = Vector2i(640, 360)
 	vp.own_world_3d = true
 	vp.transparent_bg = false
-	vp.msaa_3d = Viewport.MSAA_4X
+	vp.msaa_3d = Viewport.MSAA_2X
+	vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	preview.add_child(vp)
 	_preview_viewport = vp
 	_build_preview_world(vp)
@@ -787,9 +808,8 @@ func _build_preview_world(vp: SubViewport) -> void:
 	env.ambient_light_color = Color(0.55, 0.55, 0.5)
 	env.ambient_light_energy = 0.6
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
-	env.glow_enabled = true
-	env.glow_intensity = 0.4
-	env.ssao_enabled = true
+	env.glow_enabled = false
+	env.ssao_enabled = false
 	var we := WorldEnvironment.new()
 	we.environment = env
 	vp.add_child(we)
@@ -803,7 +823,7 @@ func _build_preview_world(vp: SubViewport) -> void:
 	key.light_energy = 2.0
 	key.light_color = Color(1.0, 0.94, 0.86)
 	key.rotation_degrees = Vector3(-40, 35, 0)
-	key.shadow_enabled = true
+	key.shadow_enabled = false
 	vp.add_child(key)
 	var fill := OmniLight3D.new()
 	fill.position = Vector3(-1.4, 0.8, 1.4)

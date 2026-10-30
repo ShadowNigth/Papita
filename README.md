@@ -2,7 +2,7 @@
 
 Recreación jugable y **completa** del clásico *Counter-Strike 1.5*, hecha desde cero en **Godot 4.4** como proyecto personal (sin distribución pública).
 
-> **No es un volcado de archivos de Valve.** Todo el código, los modelos 3D, las texturas PBR y los sonidos son originales y se generan de forma procedural dentro del juego. El proyecto reproduce fielmente las mecánicas, la economía, las armas y los mapas clásicos, pero con arte propio: no se incluye ni un solo asset original de Counter-Strike.
+> **Modelos 3D originales de Counter-Strike 1.5 (`assets/models/cs15/*.mdl`)**: integra los 96 modelos StudioModel v10 originales de CS 1.5 (`v_*`, `p_*`, `w_*`, las 8 facciones CT/T, VIP, rehén y esqueleto) cargados de forma nativa en memoria y cacheados en GPU mediante `src/world/mdl_loader.gd`, junto con mapas, texturas PBR y audio DSP procedurales.
 
 ---
 
@@ -57,11 +57,11 @@ Todos los sonidos se sintetizan por DSP al arrancar: 16 familias de disparos con
 
 ## 1.1 Descargar el proyecto
 
-**Descarga directa del zip (última versión):**
+**Descarga directa del zip (última versión `v1.0.3`):**
 
-> ### ⬇️ https://github.com/ShadowNigth/Papita/archive/refs/tags/v1.0.2.zip
+> ### ⬇️ https://github.com/ShadowNigth/Papita/archive/refs/tags/v1.0.3.zip
 
-- Página de la release: https://github.com/ShadowNigth/Papita/releases/tag/v1.0.2
+- Página de la release: https://github.com/ShadowNigth/Papita/releases/tag/v1.0.3
 - Último estado de la rama de desarrollo (zip): https://github.com/ShadowNigth/Papita/archive/refs/heads/arena/9025a588-papita.zip
 
 El zip contiene el proyecto completo (código, shaders, fuentes, docs y herramientas). No incluye `.git` ni `.godot`.
@@ -143,7 +143,8 @@ src/world/
   maps.gd                   Layouts de los 10 mapas (DSL de bloques y props)
   map_builder.gd            Geometría, ambiente, luces, props, navegación
   nav_graph.gd              Grilla de alturas + A* con suavizado
-  material_lib.gd           Texturas PBR procedurales y materiales
+  mdl_loader.gd             Cargador binario y cache GPU de modelos .mdl de CS 1.5
+  material_lib.gd           Texturas PBR procedurales con mipmaps y cache
   prop_lib.gd               Props 3D (cajas, autos, trenes, árboles, etc.)
 
 src/entities/

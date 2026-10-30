@@ -450,10 +450,27 @@ func reload() -> void:
 	if is_player:
 		AudioBank.play_2d("reload_out", -6.0, _rng.randf_range(0.95, 1.05))
 		_play_reload_sequence(def)
+		_on_reload_started(reload_total)
 	else:
 		AudioBank.play_at("reload_out", get_parent(), global_position, -6.0, 1.0, 20.0)
 	weapon_state_changed.emit(self)
 	_start_reload_timer()
+
+
+func _on_reload_started(_duration: float) -> void:
+	pass
+
+
+func _on_melee_attacked(_hit: bool) -> void:
+	pass
+
+
+func _on_grenade_thrown() -> void:
+	pass
+
+
+func _on_silencer_toggled(_enabled: bool) -> void:
+	pass
 
 
 func _start_reload_timer() -> void:
@@ -810,7 +827,7 @@ func die(attacker: Node, weapon_id: String, headshot: bool, wallbang: bool = fal
 	burst_left = 0
 	zoom_level = 0
 	if actor_model:
-		actor_model.play_death()
+		actor_model.play_death(headshot)
 	AudioBank.play_at(
 		"death_cry",
 		get_parent(),
@@ -937,9 +954,12 @@ func _melee_attack() -> void:
 				hit_confirmed.emit(self, victim, dmg, back)
 				Fx.blood(get_parent(), hit.position, -dir, 18 if back else 10)
 				AudioBank.play_at("knife_hit", get_parent(), hit.position, 0.0, 1.0, 25.0)
+				_on_melee_attacked(true)
 				return
 		Fx.impact(get_parent(), hit.position, hit.normal, "concrete")
+		_on_melee_attacked(true)
 		return
+	_on_melee_attacked(false)
 
 
 func _throw_grenade() -> void:
@@ -963,6 +983,7 @@ func _throw_grenade() -> void:
 	AudioBank.play_at(
 		"grenade_throw", get_parent(), origin, -4.0, _rng.randf_range(0.95, 1.05), 25.0
 	)
+	_on_grenade_thrown()
 	weapon_state_changed.emit(self)
 
 
@@ -973,6 +994,7 @@ func toggle_silencer() -> void:
 	silencer_on = not silencer_on
 	next_fire_time = _now() + 0.5
 	AudioBank.play_2d("draw", -10.0)
+	_on_silencer_toggled(silencer_on)
 	weapon_state_changed.emit(self)
 
 

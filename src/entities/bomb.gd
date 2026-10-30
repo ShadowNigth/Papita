@@ -37,42 +37,44 @@ func _ready() -> void:
 
 
 func _build() -> void:
-	var body := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(0.34, 0.12, 0.24)
-	body.mesh = mesh
-	body.material_override = MaterialLib.simple(Color(0.28, 0.22, 0.12), 0.8)
-	add_child(body)
+	var c4_model := MdlLoader.build_world_weapon("c4", false)
+	if c4_model != null:
+		c4_model.scale = Vector3.ONE * 1.15
+		add_child(c4_model)
+	else:
+		var body := MeshInstance3D.new()
+		var mesh := BoxMesh.new()
+		mesh.size = Vector3(0.34, 0.12, 0.24)
+		body.mesh = mesh
+		body.material_override = MaterialLib.simple(Color(0.28, 0.22, 0.12), 0.8)
+		add_child(body)
 	var panel := MeshInstance3D.new()
-	var pm := BoxMesh.new()
-	pm.size = Vector3(0.12, 0.02, 0.08)
+	var pm := SphereMesh.new()
+	pm.radius = 0.02
+	pm.height = 0.04
 	panel.mesh = pm
-	panel.position = Vector3(0.05, 0.07, 0)
-	_red_mat = MaterialLib.emissive(Color(1.0, 0.1, 0.05), 3.0)
+	panel.position = Vector3(0.02, 0.14, 0.0)
+	_red_mat = MaterialLib.emissive(Color(1.0, 0.1, 0.05), 4.0)
 	panel.material_override = _red_mat
+	panel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_led = panel
 	add_child(panel)
-	var wires := MeshInstance3D.new()
-	var wm := BoxMesh.new()
-	wm.size = Vector3(0.18, 0.03, 0.02)
-	wires.mesh = wm
-	wires.position = Vector3(-0.05, 0.07, 0.04)
-	wires.material_override = MaterialLib.simple(Color(0.7, 0.15, 0.1), 0.6)
-	add_child(wires)
 	_light = OmniLight3D.new()
 	_light.light_color = Color(1.0, 0.1, 0.05)
 	_light.light_energy = 0.0
 	_light.omni_range = 4.0
-	_light.position = Vector3(0, 0.2, 0)
+	_light.shadow_enabled = false
+	_light.position = Vector3(0, 0.22, 0)
 	add_child(_light)
 	_label = Label3D.new()
 	_label.text = "C4"
-	_label.font_size = 64
+	_label.font_size = 56
 	_label.pixel_size = 0.003
 	_label.position = Vector3(0, 0.35, 0)
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_label.modulate = Color(1.0, 0.25, 0.2)
 	_label.outline_size = 8
+	_label.visibility_range_end = 28.0
 	add_child(_label)
 
 

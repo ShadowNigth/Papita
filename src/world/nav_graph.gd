@@ -1,9 +1,9 @@
 extends RefCounted
-## NavGraph: grilla de navegacion 2.5D con A* para los bots.
+## NavGraph: grilla de navegacion 2.5D con AStar3D nativo en C++ para los bots.
 ##
-## En vez de hornear un NavMesh (lento y fragil con geometria procedural),
-## se muestrea el mundo con rayos y se guarda una malla de alturas. Soporta
-## desniveles, rampas y escaleras, y descarta celdas sin espacio libre.
+## Muestrea el mundo con rayos, guarda una malla de alturas y preconstruye
+## un grafo AStar3D nativo una sola vez en `finish()`, logrando busquedas de
+## ruta instantaneas sin asignaciones por frame en GDScript.
 
 class_name NavGraph
 
@@ -14,6 +14,8 @@ var rows := 0
 var heights: PackedFloat32Array = PackedFloat32Array()
 var blocked: PackedByteArray = PackedByteArray()
 var ready := false
+
+var _astar: AStar3D = AStar3D.new()
 
 
 func setup(bounds_rect: Rect2, cell_size: float = 0.8) -> void:
@@ -26,6 +28,7 @@ func setup(bounds_rect: Rect2, cell_size: float = 0.8) -> void:
 	heights.fill(0.0)
 	blocked.resize(n)
 	blocked.fill(1)
+	ready = false
 
 
 func set_cell(cx: int, cz: int, height: float, is_blocked: bool) -> void:
@@ -37,6 +40,47 @@ func set_cell(cx: int, cz: int, height: float, is_blocked: bool) -> void:
 
 
 func finish() -> void:
+	_astar = AStar3D.new()
+	var n := cols * rows
+	_astar.reserve_space(n)
+	for cz in rows:
+		for cx in cols:
+			var idx := cz * cols + cx
+			if blocked[idx] == 0:
+				_astar.add_point(idx, world_from_cell(Vector2i(cx, cz)), 1.0)
+	for cz in rows:
+		for cx in cols:
+			var idx := cz * cols + cx
+			if blocked[idx] != 0:
+				continue
+			var h0 := heights[idx]
+			# Vecinos hacia adelante (evita conectar cada arista dos veces).
+			if cx + 1 < cols:
+				var ni := idx + 1
+				if blocked[ni] == 0 and absf(heights[ni] - h0) <= 0.65:
+					_astar.connect_points(idx, ni, true)
+			if cz + 1 < rows:
+				var ni2 := idx + cols
+				if blocked[ni2] == 0 and absf(heights[ni2] - h0) <= 0.65:
+					_astar.connect_points(idx, ni2, true)
+			if cx + 1 < cols and cz + 1 < rows:
+				var nd1 := idx + cols + 1
+				if (
+					blocked[nd1] == 0
+					and blocked[idx + 1] == 0
+					and blocked[idx + cols] == 0
+					and absf(heights[nd1] - h0) <= 0.65
+				):
+					_astar.connect_points(idx, nd1, true)
+			if cx - 1 >= 0 and cz + 1 < rows:
+				var nd2 := idx + cols - 1
+				if (
+					blocked[nd2] == 0
+					and blocked[idx - 1] == 0
+					and blocked[idx + cols] == 0
+					and absf(heights[nd2] - h0) <= 0.65
+				):
+					_astar.connect_points(idx, nd2, true)
 	ready = true
 
 
@@ -89,7 +133,7 @@ func nearest_walkable(c: Vector2i, max_radius: int = 8) -> Vector2i:
 	return c
 
 
-## Ruta completa desde `from` hasta `to`. Devuelve puntos en world space.
+## Ruta completa desde `from` hasta `to` usando AStar3D nativo en C++.
 func find_path(from: Vector3, to: Vector3) -> PackedVector3Array:
 	var out := PackedVector3Array()
 	if not ready:
@@ -103,116 +147,35 @@ func find_path(from: Vector3, to: Vector3) -> PackedVector3Array:
 	if start_i == goal_i:
 		out.append(world_from_cell(goal))
 		return out
-
-	var n := cols * rows
-	var g_score := PackedFloat32Array()
-	g_score.resize(n)
-	g_score.fill(INF)
-	var came := PackedInt32Array()
-	came.resize(n)
-	came.fill(-1)
-	var closed := PackedByteArray()
-	closed.resize(n)
-	closed.fill(0)
-
-	# Heap binario de indices, ordenado por f_score.
-	var heap_i: Array[int] = []
-	var heap_f: Array[float] = []
-	var hf := PackedFloat32Array()
-	hf.resize(n)
-	hf.fill(INF)
-	g_score[start_i] = 0.0
-	hf[start_i] = _heuristic(start, goal)
-	_heap_push(heap_i, heap_f, start_i, hf[start_i])
-	var found := false
-	var guard := 0
-	while heap_i.size() > 0 and guard < n * 3:
-		guard += 1
-		var current := _heap_pop(heap_i, heap_f)
-		if current == goal_i:
-			found = true
-			break
-		if closed[current] == 1:
-			continue
-		closed[current] = 1
-		var cx := current % cols
-		var cz := int(current / cols)
-		for dir: Vector2i in [
-			Vector2i(1, 0),
-			Vector2i(-1, 0),
-			Vector2i(0, 1),
-			Vector2i(0, -1),
-			Vector2i(1, 1),
-			Vector2i(1, -1),
-			Vector2i(-1, 1),
-			Vector2i(-1, -1)
-		]:
-			var nx := cx + dir.x
-			var nz := cz + dir.y
-			if nx < 0 or nz < 0 or nx >= cols or nz >= rows:
-				continue
-			var ni := nz * cols + nx
-			if blocked[ni] == 1 or closed[ni] == 1:
-				continue
-			var dh: float = absf(heights[ni] - heights[current])
-			if dh > 0.62:
-				continue
-			if dir.x != 0 and dir.y != 0:
-				# Evita cortar esquinas en diagonal.
-				if blocked[cz * cols + nx] == 1 or blocked[nz * cols + cx] == 1:
-					continue
-			var step := 1.4142 if (dir.x != 0 and dir.y != 0) else 1.0
-			var tentative: float = g_score[current] + step + dh * 3.0
-			if tentative < g_score[ni]:
-				g_score[ni] = tentative
-				came[ni] = current
-				hf[ni] = tentative + _heuristic(Vector2i(nx, nz), goal)
-				_heap_push(heap_i, heap_f, ni, hf[ni])
-	if not found:
+	if not _astar.has_point(start_i) or not _astar.has_point(goal_i):
 		return out
-	# Reconstruccion.
-	var chain: Array[int] = []
-	var cur := goal_i
-	var safety := 0
-	while cur != -1 and safety < n:
-		safety += 1
-		chain.append(cur)
-		if cur == start_i:
-			break
-		cur = came[cur]
-	chain.reverse()
-	var raw: Array[Vector3] = []
-	for idx in chain:
-		var c := Vector2i(idx % cols, int(idx / cols))
-		raw.append(world_from_cell(c))
-	# Suavizado: conserva solo los puntos necesarios.
+	var raw := _astar.get_point_path(start_i, goal_i, true)
+	if raw.is_empty():
+		return out
+	# Suavizado lineal acotado O(N) para conservar esquinas limpias sin tirones.
 	var i := 0
-	while i < raw.size():
+	var last_idx := raw.size() - 1
+	while i <= last_idx:
 		out.append(raw[i])
-		var next := raw.size() - 1
-		var j := raw.size() - 1
+		if i == last_idx:
+			break
+		var next := i + 1
+		var max_j := mini(last_idx, i + 10)
+		var j := max_j
 		while j > i + 1:
 			if _line_clear(raw[i], raw[j]):
 				next = j
 				break
 			j -= 1
-		if next <= i:
-			break
 		i = next
-	if out.size() == 0 or out[out.size() - 1].distance_to(raw[raw.size() - 1]) > 0.15:
-		out.append(raw[raw.size() - 1])
+	if out.is_empty() or out[out.size() - 1].distance_to(raw[last_idx]) > 0.15:
+		out.append(raw[last_idx])
 	return out
-
-
-func _heuristic(a: Vector2i, b: Vector2i) -> float:
-	var dx := absf(float(a.x - b.x))
-	var dz := absf(float(a.y - b.y))
-	return (dx + dz) + (1.4142 - 2.0) * minf(dx, dz)
 
 
 func _line_clear(a: Vector3, b: Vector3) -> bool:
 	var dist := a.distance_to(b)
-	var steps := maxi(2, int(dist / (cell * 0.7)))
+	var steps := maxi(2, int(dist / (cell * 0.75)))
 	var prev_h := height_at(a)
 	for s in range(1, steps + 1):
 		var t := float(s) / float(steps)
@@ -225,54 +188,6 @@ func _line_clear(a: Vector3, b: Vector3) -> bool:
 			return false
 		prev_h = h
 	return true
-
-
-func _heap_push(heap_i: Array[int], heap_f: Array[float], idx: int, f: float) -> void:
-	heap_i.append(idx)
-	heap_f.append(f)
-	var i := heap_i.size() - 1
-	while i > 0:
-		var parent := (i - 1) / 2
-		if heap_f[parent] <= heap_f[i]:
-			break
-		var ti := heap_i[parent]
-		var tf := heap_f[parent]
-		heap_i[parent] = heap_i[i]
-		heap_f[parent] = heap_f[i]
-		heap_i[i] = ti
-		heap_f[i] = tf
-		i = parent
-
-
-func _heap_pop(heap_i: Array[int], heap_f: Array[float]) -> int:
-	var top := heap_i[0]
-	var last_i := heap_i[heap_i.size() - 1]
-	var last_f := heap_f[heap_f.size() - 1]
-	heap_i.remove_at(heap_i.size() - 1)
-	heap_f.remove_at(heap_f.size() - 1)
-	if heap_i.size() > 0:
-		heap_i[0] = last_i
-		heap_f[0] = last_f
-		var i := 0
-		var n := heap_i.size()
-		while true:
-			var l := i * 2 + 1
-			var r := l + 1
-			var smallest := i
-			if l < n and heap_f[l] < heap_f[smallest]:
-				smallest = l
-			if r < n and heap_f[r] < heap_f[smallest]:
-				smallest = r
-			if smallest == i:
-				break
-			var ti := heap_i[smallest]
-			var tf := heap_f[smallest]
-			heap_i[smallest] = heap_i[i]
-			heap_f[smallest] = heap_f[i]
-			heap_i[i] = ti
-			heap_f[i] = tf
-			i = smallest
-	return top
 
 
 func random_point(rng: RandomNumberGenerator) -> Vector3:

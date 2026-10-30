@@ -34,28 +34,25 @@ func _ready() -> void:
 	mat.bounce = 0.45
 	mat.friction = 0.7
 	physics_material_override = mat
-	var mi := MeshInstance3D.new()
-	var mesh := SphereMesh.new()
-	mesh.radius = 0.09
-	mesh.height = 0.18
-	mesh.radial_segments = 12
-	mesh.rings = 6
-	mi.mesh = mesh
-	var color := Color(0.25, 0.32, 0.18)
-	if grenade_id == "flashbang":
-		color = Color(0.55, 0.55, 0.52)
-	elif grenade_id == "smokegrenade":
-		color = Color(0.35, 0.38, 0.35)
-	mi.material_override = MaterialLib.simple(color, 0.5, 0.4)
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	add_child(mi)
-	var ring := MeshInstance3D.new()
-	var torus := TorusMesh.new()
-	torus.inner_radius = 0.075
-	torus.outer_radius = 0.095
-	ring.mesh = torus
-	ring.material_override = MaterialLib.simple(Color(0.15, 0.15, 0.15), 0.5, 0.7)
-	add_child(ring)
+	var g_mdl := MdlLoader.build_world_weapon(grenade_id, true)
+	if g_mdl != null:
+		g_mdl.scale = Vector3.ONE * 1.15
+		add_child(g_mdl)
+	else:
+		var mi := MeshInstance3D.new()
+		var mesh := SphereMesh.new()
+		mesh.radius = 0.09
+		mesh.height = 0.18
+		mesh.radial_segments = 10
+		mesh.rings = 5
+		mi.mesh = mesh
+		var color := Color(0.25, 0.32, 0.18)
+		if grenade_id == "flashbang":
+			color = Color(0.55, 0.55, 0.52)
+		elif grenade_id == "smokegrenade":
+			color = Color(0.35, 0.38, 0.35)
+		mi.material_override = MaterialLib.simple(color, 0.5, 0.4)
+		add_child(mi)
 	body_entered.connect(_on_body_entered)
 	_fuse = 2.2 + randf_range(0.0, 0.4)
 	AudioBank.play_at("grenade_throw", self, global_position, -2.0, randf_range(0.95, 1.05), 30.0)

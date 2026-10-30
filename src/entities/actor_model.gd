@@ -1,193 +1,128 @@
 extends Node3D
-## ActorModel: soldado / zombie procedural con animacion simple y arma en mano.
+## ActorModel: soldados CT/T, rehenes y zombies con modelos .mdl originales de
+## Counter-Strike 1.5 (urban, gsg9, sas, gign, terror, leet, arctic, guerilla, hostage),
+## skinning en GPU, AnimationPlayer nativo en C++ y armas p_*.mdl en las manos.
 
 class_name ActorModel
 
 var team := 1
 var is_zombie := false
+var is_hostage_actor := false
 var zombie_color := Color(0.4, 0.5, 0.35)
 var body_scale := 1.0
 var alive := true
 
-var _body: Node3D
-var _torso: Node3D
-var _head: Node3D
-var _arm_l: Node3D
-var _arm_r: Node3D
-var _leg_l: Node3D
-var _leg_r: Node3D
-var _weapon_holder: Node3D
-var _weapon_model: Node3D
+var _mdl_root: Node3D
+var _skeleton: Skeleton3D
+var _anim_player: AnimationPlayer
+var _r_hand: BoneAttachment3D
+var _l_hand: BoneAttachment3D
+var _r_weapon_mi: MeshInstance3D
+var _l_weapon_mi: MeshInstance3D
 var _label: Label3D
-var _phase := 0.0
-var _crouch := false
-var _death_tween: Tween
+var _stand_y := 1.01
+var _crouch_y := 0.50
+var _cur_anim := ""
+var _weapon_stance := "rifle"
+var _variant_seed := 0
 
 
 func setup(
-	team_id: int, zombie: bool = false, z_color: Color = Color(0.4, 0.5, 0.35), s: float = 1.0
+	team_id: int,
+	zombie: bool = false,
+	z_color: Color = Color(0.4, 0.5, 0.35),
+	s: float = 1.0,
+	hostage_mode: bool = false,
+	variant_seed: int = -1
 ) -> void:
 	for child in get_children():
 		child.queue_free()
+	_mdl_root = null
+	_skeleton = null
+	_anim_player = null
+	_r_hand = null
+	_l_hand = null
+	_r_weapon_mi = null
+	_l_weapon_mi = null
+	_cur_anim = ""
+
 	team = team_id
 	is_zombie = zombie
+	is_hostage_actor = hostage_mode
 	zombie_color = z_color
 	body_scale = s
+	alive = true
 	scale = Vector3.ONE * s
+	_variant_seed = absi(get_instance_id()) if variant_seed < 0 else variant_seed
 	_build()
 
 
-func _mat(color: Color, rough: float = 0.8, metal: float = 0.0) -> StandardMaterial3D:
-	return MaterialLib.simple(color, rough, metal)
-
-
-func _part(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	mi.mesh = mesh
-	mi.position = pos
-	mi.material_override = mat
-	parent.add_child(mi)
-	return mi
-
-
 func _build() -> void:
-	_body = Node3D.new()
-	_body.name = "Body"
-	add_child(_body)
-	var uniform := Color(0.18, 0.23, 0.3)
-	var skin := Color(0.72, 0.56, 0.42)
-	var vest_col := Color(0.12, 0.15, 0.19)
-	if team == Content.TEAM_T:
-		uniform = Color(0.36, 0.3, 0.2)
-		vest_col = Color(0.24, 0.2, 0.14)
-	if is_zombie:
-		uniform = Color(0.2, 0.2, 0.18)
-		vest_col = Color(0.16, 0.16, 0.14)
-		skin = zombie_color
-	var uniform_mat := _mat(uniform)
-	var vest_mat := _mat(vest_col, 0.7)
-	var skin_mat := _mat(skin, 0.85)
-	var boot_mat := _mat(Color(0.08, 0.08, 0.08), 0.8)
-	var helmet_mat := _mat(
-		Color(0.15, 0.18, 0.16) if team == Content.TEAM_CT else Color(0.3, 0.26, 0.18), 0.5, 0.2
+	var built := MdlLoader.build_actor(
+		team, is_zombie, is_hostage_actor, zombie_color, _variant_seed
 	)
-
-	# Piernas con pivote en la cadera.
-	_leg_l = Node3D.new()
-	_leg_l.position = Vector3(-0.115, 0.92, 0)
-	_body.add_child(_leg_l)
-	_part(_leg_l, Vector3(0.17, 0.82, 0.2), Vector3(0, -0.42, 0), uniform_mat)
-	_part(_leg_l, Vector3(0.18, 0.12, 0.28), Vector3(0, -0.84, 0.04), boot_mat)
-	_leg_r = Node3D.new()
-	_leg_r.position = Vector3(0.115, 0.92, 0)
-	_body.add_child(_leg_r)
-	_part(_leg_r, Vector3(0.17, 0.82, 0.2), Vector3(0, -0.42, 0), uniform_mat)
-	_part(_leg_r, Vector3(0.18, 0.12, 0.28), Vector3(0, -0.84, 0.04), boot_mat)
-
-	# Torso.
-	_torso = Node3D.new()
-	_torso.position = Vector3(0, 1.28, 0)
-	_body.add_child(_torso)
-	_part(_torso, Vector3(0.46, 0.58, 0.26), Vector3.ZERO, uniform_mat)
-	_part(_torso, Vector3(0.48, 0.42, 0.3), Vector3(0, 0.02, 0), vest_mat)
-	_part(_torso, Vector3(0.2, 0.12, 0.32), Vector3(0, 0.16, 0), vest_mat)
-	_part(
-		_torso,
-		Vector3(0.36, 0.08, 0.28),
-		Vector3(0, 0.3, 0),
-		_mat(Color(0.55, 0.5, 0.4) if not is_zombie else Color(0.3, 0.32, 0.24))
-	)
-	if is_zombie:
-		# Manchas y ropa rota.
-		_part(
-			_torso,
-			Vector3(0.16, 0.2, 0.31),
-			Vector3(0.1, -0.1, 0),
-			_mat(Color(0.3, 0.08, 0.06), 0.9)
-		)
-		_part(
-			_leg_l, Vector3(0.18, 0.3, 0.22), Vector3(0.0, -0.55, 0), _mat(Color(0.26, 0.22, 0.18))
-		)
-
-	# Cabeza y cuello.
-	_head = Node3D.new()
-	_head.position = Vector3(0, 1.72, 0)
-	_body.add_child(_head)
-	_part(_head, Vector3(0.16, 0.1, 0.16), Vector3(0, -0.1, 0), skin_mat)
-	_part(_head, Vector3(0.26, 0.28, 0.26), Vector3(0, 0.04, 0), skin_mat)
-	_part(_head, Vector3(0.28, 0.09, 0.28), Vector3(0, 0.2, 0), helmet_mat)
-	_part(_head, Vector3(0.29, 0.06, 0.12), Vector3(0, 0.14, -0.1), helmet_mat)
-	# Ojos brillantes en zombies.
-	if is_zombie:
-		_part(
-			_head,
-			Vector3(0.05, 0.03, 0.02),
-			Vector3(-0.07, 0.05, -0.14),
-			MaterialLib.emissive(Color(1.0, 0.75, 0.2), 3.0)
-		)
-		_part(
-			_head,
-			Vector3(0.05, 0.03, 0.02),
-			Vector3(0.07, 0.05, -0.14),
-			MaterialLib.emissive(Color(1.0, 0.75, 0.2), 3.0)
-		)
-	else:
-		_part(
-			_head,
-			Vector3(0.05, 0.02, 0.02),
-			Vector3(-0.06, 0.05, -0.14),
-			_mat(Color(0.05, 0.05, 0.05))
-		)
-		_part(
-			_head,
-			Vector3(0.05, 0.02, 0.02),
-			Vector3(0.06, 0.05, -0.14),
-			_mat(Color(0.05, 0.05, 0.05))
-		)
-		_part(
-			_head, Vector3(0.12, 0.06, 0.02), Vector3(0, -0.04, -0.14), _mat(Color(0.5, 0.35, 0.3))
-		)
-
-	# Brazos con pivote en el hombro.
-	_arm_l = Node3D.new()
-	_arm_l.position = Vector3(-0.3, 1.5, 0)
-	_body.add_child(_arm_l)
-	_part(_arm_l, Vector3(0.14, 0.52, 0.16), Vector3(0, -0.26, 0), uniform_mat)
-	_part(_arm_l, Vector3(0.13, 0.12, 0.15), Vector3(0, -0.56, 0), skin_mat)
-	_arm_r = Node3D.new()
-	_arm_r.position = Vector3(0.3, 1.5, 0)
-	_body.add_child(_arm_r)
-	_part(_arm_r, Vector3(0.14, 0.52, 0.16), Vector3(0, -0.26, 0), uniform_mat)
-	_part(_arm_r, Vector3(0.13, 0.12, 0.15), Vector3(0, -0.56, 0), skin_mat)
-
-	_weapon_holder = Node3D.new()
-	_weapon_holder.position = Vector3(-0.18, 1.32, -0.26)
-	_weapon_holder.rotation_degrees = Vector3(0, 180, 0)
-	_body.add_child(_weapon_holder)
+	if not built.is_empty():
+		_mdl_root = built["root"]
+		add_child(_mdl_root)
+		_skeleton = built["skeleton"]
+		_anim_player = built["anim_player"]
+		_r_hand = built["r_hand"]
+		_l_hand = built["l_hand"]
+		_stand_y = float(built["stand_y"])
+		_crouch_y = float(built["crouch_y"])
+		if _r_hand != null:
+			_r_weapon_mi = MeshInstance3D.new()
+			_r_weapon_mi.name = "HeldWeaponR"
+			_r_weapon_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_r_hand.add_child(_r_weapon_mi)
+		if _l_hand != null:
+			_l_weapon_mi = MeshInstance3D.new()
+			_l_weapon_mi.name = "HeldWeaponL"
+			_l_weapon_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_l_hand.add_child(_l_weapon_mi)
+		_play_anim(_initial_anim_name())
 
 	_label = Label3D.new()
 	_label.text = ""
-	_label.font_size = 44
+	_label.font_size = 40
 	_label.pixel_size = 0.004
-	_label.position = Vector3(0, 2.1, 0)
+	_label.position = Vector3(0.0, 2.02, 0.0)
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_label.no_depth_test = false
-	_label.outline_size = 8
-	_label.outline_modulate = Color(0, 0, 0, 0.8)
-	_label.modulate = Color(0.6, 0.85, 1.0) if team == Content.TEAM_CT else Color(1.0, 0.75, 0.4)
+	_label.outline_size = 7
+	_label.outline_modulate = Color(0.0, 0.0, 0.0, 0.8)
+	_label.visibility_range_end = 26.0
+	_label.modulate = (Color(0.6, 0.85, 1.0) if team == Content.TEAM_CT else Color(1.0, 0.75, 0.4))
+	if is_hostage_actor:
+		_label.modulate = Color(0.55, 1.0, 0.65)
+	if is_zombie:
+		_label.visible = false
 	add_child(_label)
 
+
+func _initial_anim_name() -> String:
+	if is_hostage_actor:
+		return "idle"
 	if is_zombie:
-		# Postura encorvada, brazos al frente.
-		_torso.rotation_degrees.x = 8.0
-		_arm_l.rotation_degrees.x = -75.0
-		_arm_r.rotation_degrees.x = -80.0
-		_weapon_holder.visible = false
+		return "zombie_idle"
+	return "idle_rifle"
+
+
+func _play_anim(anim_name: String, speed: float = 1.0) -> void:
+	if _anim_player == null:
+		return
+	if not _anim_player.has_animation(anim_name):
+		return
+	if _cur_anim != anim_name:
+		_cur_anim = anim_name
+		_anim_player.play(anim_name, 0.12)
+	if absf(_anim_player.speed_scale - speed) > 0.04:
+		_anim_player.speed_scale = speed
 
 
 func set_name_tag(text: String) -> void:
+	if _label == null:
+		return
 	if is_zombie:
 		_label.visible = false
 		return
@@ -195,88 +130,112 @@ func set_name_tag(text: String) -> void:
 
 
 func equip(def: Dictionary) -> void:
-	if _weapon_holder == null or is_zombie:
+	if is_zombie or is_hostage_actor:
+		hide_weapon()
 		return
-	if _weapon_model and is_instance_valid(_weapon_model):
-		_weapon_model.queue_free()
-	_weapon_model = WeaponModel.build(def)
-	_weapon_holder.add_child(_weapon_model)
-	_weapon_holder.visible = true
-	_arm_l.rotation_degrees = Vector3(-55, 0, 18)
-	_arm_r.rotation_degrees = Vector3(-65, 0, -12)
+	var wid := String(def.get("id", "knife"))
+	var grp := MdlLoader.aim_group_for(wid)
+	match grp:
+		"onehanded", "grenade", "c4":
+			_weapon_stance = "pistol"
+		"knife":
+			_weapon_stance = "knife"
+		"dualpistols":
+			_weapon_stance = "dual"
+		_:
+			_weapon_stance = "rifle"
+
+	var held := MdlLoader.get_held_weapon_meshes(wid)
+	if _r_weapon_mi != null:
+		var rm: ArrayMesh = held.get("r_mesh", null)
+		_r_weapon_mi.mesh = rm
+		_r_weapon_mi.visible = rm != null
+	if _l_weapon_mi != null:
+		var lm: ArrayMesh = held.get("l_mesh", null)
+		_l_weapon_mi.mesh = lm
+		_l_weapon_mi.visible = lm != null
 
 
 func hide_weapon() -> void:
-	if _weapon_model and is_instance_valid(_weapon_model):
-		_weapon_model.queue_free()
-	_weapon_model = null
+	if _r_weapon_mi != null:
+		_r_weapon_mi.visible = false
+	if _l_weapon_mi != null:
+		_l_weapon_mi.visible = false
 
 
-func animate(velocity: Vector3, grounded: bool, pitch: float, crouch: bool, delta: float) -> void:
-	if not alive:
+func animate(velocity: Vector3, grounded: bool, _pitch: float, crouch: bool, delta: float) -> void:
+	if not alive or _anim_player == null:
 		return
+	var planar := Vector2(velocity.x, velocity.z).length()
+
+	if _skeleton != null and not is_hostage_actor:
+		var target_y := _crouch_y if crouch else _stand_y
+		_skeleton.position.y = lerpf(_skeleton.position.y, target_y, clampf(delta * 14.0, 0.0, 1.0))
+
+	if is_hostage_actor:
+		if crouch:
+			_play_anim("crouch_idle", 1.0)
+		elif planar > 3.2:
+			_play_anim("run", clampf(planar / 4.8, 0.85, 1.35))
+		elif planar > 0.4:
+			_play_anim("walk", clampf(planar / 2.6, 0.8, 1.3))
+		else:
+			_play_anim("idle", 1.0)
+		return
+
 	if is_zombie:
-		_animate_zombie(velocity, delta)
+		if planar > 3.0:
+			_play_anim("zombie_run", clampf(planar / 5.0, 0.85, 1.45))
+		elif planar > 0.35:
+			_play_anim("zombie_walk", clampf(planar / 2.5, 0.85, 1.35))
+		else:
+			_play_anim("zombie_idle", 1.0)
 		return
-	var planar := Vector2(velocity.x, velocity.z).length()
-	var speed_f := clampf(planar / 5.0, 0.0, 1.6)
-	_phase += delta * (4.0 + planar * 1.9)
-	var swing := sin(_phase) * 0.55 * speed_f
+
 	if not grounded:
-		swing = 0.25
-	_leg_l.rotation_degrees.x = swing
-	_leg_r.rotation_degrees.x = -swing
-	_crouch = crouch
-	var target_y := 1.28
+		_play_anim("jump", 1.0)
+		return
+
+	var stance_suffix := "_" + _weapon_stance
 	if crouch:
-		target_y = 0.95
-		_leg_l.rotation_degrees.x = 0.5
-		_leg_r.rotation_degrees.x = -0.15
-	_torso.position.y = lerpf(_torso.position.y, target_y, delta * 10.0)
-	_head.position.y = _torso.position.y + 0.44
-	_head.rotation_degrees.x = clampf(pitch, -38.0, 32.0) * 0.35
-	_body.position.y = absf(sin(_phase * 2.0)) * 0.012 * speed_f
-	_arm_l.rotation_degrees.x = -55.0 + sin(_phase) * 2.0 * speed_f
-	_arm_r.rotation_degrees.x = -65.0 + sin(_phase + 1.0) * 2.0 * speed_f
+		var c_suffix := "_pistol" if _weapon_stance == "pistol" else "_rifle"
+		if planar > 0.5:
+			_play_anim("crouch_run" + c_suffix, clampf(planar / 2.6, 0.8, 1.3))
+		else:
+			_play_anim("crouch_idle" + c_suffix, 1.0)
+		return
+
+	if planar > 3.2:
+		_play_anim("run" + stance_suffix, clampf(planar / 5.2, 0.85, 1.3))
+	elif planar > 0.45:
+		var w_name := "walk" + stance_suffix
+		if not _anim_player.has_animation(w_name):
+			w_name = "run" + stance_suffix
+		_play_anim(w_name, clampf(planar / 2.8, 0.75, 1.2))
+	else:
+		_play_anim("idle" + stance_suffix, 1.0)
 
 
-func _animate_zombie(velocity: Vector3, delta: float) -> void:
-	var planar := Vector2(velocity.x, velocity.z).length()
-	_phase += delta * (3.0 + planar * 2.0)
-	var s := sin(_phase) * 0.7
-	_leg_l.rotation_degrees.x = s
-	_leg_r.rotation_degrees.x = -s
-	_arm_l.rotation_degrees.x = -70.0 + sin(_phase * 1.3) * 14.0
-	_arm_r.rotation_degrees.x = -78.0 + cos(_phase * 1.1) * 12.0
-	_torso.rotation_degrees.z = sin(_phase * 0.7) * 5.0
-	_head.rotation_degrees.z = sin(_phase * 0.9) * 8.0
-	_body.position.y = absf(sin(_phase)) * 0.03
-
-
-func play_death() -> void:
+func play_death(headshot: bool = false) -> void:
 	alive = false
 	hide_weapon()
-	if _death_tween and _death_tween.is_valid():
-		_death_tween.kill()
-	_death_tween = create_tween()
-	_death_tween.set_parallel(true)
-	_death_tween.tween_property(_body, "rotation_degrees:x", 88.0, 0.55).set_ease(Tween.EASE_OUT)
-	_death_tween.tween_property(_body, "position:y", 0.22, 0.55)
-	_death_tween.tween_property(_head, "rotation_degrees:z", 32.0, 0.55)
-	_death_tween.tween_property(_arm_l, "rotation_degrees:z", 38.0, 0.6)
-	_death_tween.tween_property(_arm_r, "rotation_degrees:z", -42.0, 0.6)
-	if _label:
+	if _skeleton != null and not is_hostage_actor:
+		_skeleton.position.y = _stand_y
+	if _anim_player != null:
+		var d_anim := "head" if (headshot and _anim_player.has_animation("head")) else "death1"
+		if _anim_player.has_animation(d_anim):
+			_cur_anim = d_anim
+			_anim_player.speed_scale = 1.0
+			_anim_player.play(d_anim, 0.06)
+	if _label != null:
 		_label.visible = false
 
 
 func revive() -> void:
 	alive = true
-	if _death_tween and _death_tween.is_valid():
-		_death_tween.kill()
-	_body.rotation_degrees = Vector3.ZERO
-	_body.position = Vector3.ZERO
-	_head.rotation_degrees = Vector3.ZERO
-	_arm_l.rotation_degrees = Vector3.ZERO
-	_arm_r.rotation_degrees = Vector3.ZERO
-	if _label:
+	if _skeleton != null and not is_hostage_actor:
+		_skeleton.position.y = _stand_y
+	if _label != null and not is_zombie:
 		_label.visible = true
+	_cur_anim = ""
+	_play_anim(_initial_anim_name(), 1.0)

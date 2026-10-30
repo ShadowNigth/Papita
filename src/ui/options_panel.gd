@@ -219,8 +219,8 @@ func _build_video() -> void:
 	_toggle_row(
 		page,
 		"Antialiasing MSAA 2x",
-		int(Settings.data.video.msaa) >= 2,
-		func(on: bool) -> void: Settings.set_value("video", "msaa", 2 if on else 0)
+		int(Settings.data.video.msaa) >= 1,
+		func(on: bool) -> void: Settings.set_value("video", "msaa", 1 if on else 0)
 	)
 	_option_row(
 		page,
@@ -240,6 +240,12 @@ func _build_video() -> void:
 		"Iluminacion indirecta (SSIL)",
 		bool(Settings.data.video.ssil),
 		func(on: bool) -> void: Settings.set_value("video", "ssil", on)
+	)
+	_toggle_row(
+		page,
+		"Reflejos en pantalla (SSR)",
+		bool(Settings.data.video.get("ssr", false)),
+		func(on: bool) -> void: Settings.set_value("video", "ssr", on)
 	)
 	_toggle_row(
 		page,

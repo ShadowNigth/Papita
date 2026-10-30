@@ -155,24 +155,27 @@ func _build_environment() -> void:
 	env.glow_bloom = 0.08
 	env.glow_hdr_threshold = 1.05
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
-	env.ssao_enabled = true
-	env.ssao_radius = 1.7
-	env.ssao_intensity = 2.6
+	env.ssao_enabled = false
+	env.ssao_radius = 1.5
+	env.ssao_intensity = 2.0
 	env.ssao_power = 1.4
-	env.ssil_enabled = true
-	env.ssil_radius = 3.0
-	env.ssr_enabled = true
-	env.ssr_max_steps = 56
+	env.ssil_enabled = false
+	env.ssil_radius = 2.5
+	env.ssr_enabled = false
+	env.ssr_max_steps = 24
 	env.ssr_fade_in = 0.15
 	env.ssr_fade_out = 2.0
-	env.volumetric_fog_enabled = true
+	env.volumetric_fog_enabled = false
 	env.volumetric_fog_density = preset.vol_fog
 	env.volumetric_fog_albedo = preset.fog_color
 	env.volumetric_fog_anisotropy = 0.35
-	env.volumetric_fog_length = 90.0
-	env.volumetric_fog_gi_inject = 0.4
-	env.volumetric_fog_ambient_inject = 0.35
-	env.fog_enabled = false
+	env.volumetric_fog_length = 75.0
+	env.volumetric_fog_gi_inject = 0.2
+	env.volumetric_fog_ambient_inject = 0.25
+	env.fog_enabled = true
+	env.fog_light_color = preset.fog_color
+	env.fog_density = float(preset.vol_fog) * 0.22
+	env.fog_aerial_perspective = 0.35
 	env.set_meta("volumetric_density", preset.vol_fog)
 	env.set_meta("volumetric_color", preset.fog_color)
 	env.adjustment_enabled = true
@@ -190,11 +193,13 @@ func _build_environment() -> void:
 	sun.light_energy = preset.sun_energy
 	sun.rotation_degrees = preset.sun_rot
 	sun.shadow_enabled = true
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-	sun.directional_shadow_max_distance = 110.0
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	sun.directional_shadow_blend_splits = false
+	sun.directional_shadow_max_distance = 72.0
 	sun.directional_shadow_fade_start = 0.8
-	sun.shadow_bias = 0.03
-	sun.light_volumetric_fog_energy = 1.4
+	sun.shadow_bias = 0.04
+	sun.light_volumetric_fog_energy = 1.2
+	sun.add_to_group("sun_light")
 	add_child(sun)
 	# Ajusta el sol del shader del cielo con la direccion real de la luz.
 	var dir := -Basis.from_euler(sun.rotation).z
@@ -227,32 +232,74 @@ func _build_ground() -> void:
 	_root_geo.add_child(body)
 
 
+func _surface_group_for(mat_kind: String) -> String:
+	match mat_kind:
+		"wood", "crate":
+			return "wood"
+		"metal":
+			return "metal"
+		"sand", "grass":
+			return "sand"
+		_:
+			return "concrete"
+
+
 func _build_blocks() -> void:
+	# Batching estatico por material (reduce cientos de draw calls a ~8 mallas combinadas)
+	# y fusion de colisiones por tipo de superficie.
+	var st_by_mat: Dictionary = {}
+	var mat_by_key: Dictionary = {}
+	var bodies_by_surf: Dictionary = {}
+
 	for b in data.blocks:
 		var p: Vector3 = b.p
 		var s: Vector3 = b.s
 		if s.x <= 0.0 or s.y <= 0.0 or s.z <= 0.0:
 			continue
-		var mesh := BoxMesh.new()
-		mesh.size = s
-		var mi := MeshInstance3D.new()
-		mi.mesh = mesh
-		mi.material_override = _mat(String(b.mat), int(absf(p.x + p.z) * 0.37) % 3)
-		mi.position = p
-		mi.rotation_degrees = b.get("rot", Vector3.ZERO)
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-		_root_geo.add_child(mi)
-		var body := StaticBody3D.new()
-		body.position = p
-		body.rotation_degrees = mi.rotation_degrees
-		body.collision_layer = 1
-		body.collision_mask = 0
+		var kind := String(b.mat)
+		var variant := int(absf(p.x + p.z) * 0.37) % 3
+		var mkey := "%s|%d" % [kind, variant]
+		if not st_by_mat.has(mkey):
+			var st := SurfaceTool.new()
+			st.begin(Mesh.PRIMITIVE_TRIANGLES)
+			st_by_mat[mkey] = st
+			mat_by_key[mkey] = _mat(kind, variant)
+		var box_mesh := BoxMesh.new()
+		box_mesh.size = s
+		var rot_deg: Vector3 = b.get("rot", Vector3.ZERO)
+		var rot_rad := Vector3(deg_to_rad(rot_deg.x), deg_to_rad(rot_deg.y), deg_to_rad(rot_deg.z))
+		var xform := Transform3D(Basis.from_euler(rot_rad), p)
+		var st_ref: SurfaceTool = st_by_mat[mkey]
+		st_ref.append_from(box_mesh, 0, xform)
+
+		var surf := _surface_group_for(kind)
+		if not bodies_by_surf.has(surf):
+			var sb := StaticBody3D.new()
+			sb.name = "Blocks_" + surf
+			sb.collision_layer = 1
+			sb.collision_mask = 0
+			sb.set_meta("surface", surf)
+			_root_geo.add_child(sb)
+			bodies_by_surf[surf] = sb
 		var shape := CollisionShape3D.new()
 		var box := BoxShape3D.new()
 		box.size = s
 		shape.shape = box
-		body.add_child(shape)
-		_root_geo.add_child(body)
+		shape.transform = xform
+		var sb_ref: StaticBody3D = bodies_by_surf[surf]
+		sb_ref.add_child(shape)
+
+	for mkey in st_by_mat.keys():
+		var st_done: SurfaceTool = st_by_mat[mkey]
+		var combined := st_done.commit()
+		if combined == null or combined.get_surface_count() == 0:
+			continue
+		var mi := MeshInstance3D.new()
+		mi.name = "Batch_" + String(mkey).replace("|", "_")
+		mi.mesh = combined
+		mi.material_override = mat_by_key[mkey]
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		_root_geo.add_child(mi)
 
 
 func _build_props() -> void:
@@ -325,18 +372,20 @@ func _make_prop(type: String, scale_f: float, yaw: int) -> Node3D:
 	return node
 
 
-func _add_light(p: Vector3, color: Color, energy: float, range_f: float, shadow: bool) -> void:
+func _add_light(p: Vector3, color: Color, energy: float, range_f: float, _shadow: bool) -> void:
 	var light := OmniLight3D.new()
 	light.position = p
 	light.light_color = color
 	light.light_energy = energy
 	light.omni_range = range_f
 	light.omni_attenuation = 1.4
-	light.shadow_enabled = shadow and _shadow_lights < 8
-	if light.shadow_enabled:
-		_shadow_lights += 1
-	light.light_specular = 0.4
-	light.light_volumetric_fog_energy = 0.8
+	# Las sombras cubemap de OmniLight3D cuestan 6 pases de geometria por luz en Forward+.
+	light.shadow_enabled = false
+	light.distance_fade_enabled = true
+	light.distance_fade_begin = 30.0
+	light.distance_fade_length = 8.0
+	light.light_specular = 0.35
+	light.light_volumetric_fog_energy = 0.5
 	_root_props.add_child(light)
 
 
@@ -344,8 +393,8 @@ func _build_water() -> void:
 	for w in data.get("water", []):
 		var mesh := PlaneMesh.new()
 		mesh.size = Vector2(w.s.x, w.s.z)
-		mesh.subdivide_width = 24
-		mesh.subdivide_depth = 24
+		mesh.subdivide_width = 8
+		mesh.subdivide_depth = 8
 		var mi := MeshInstance3D.new()
 		mi.mesh = mesh
 		var mat := ShaderMaterial.new()
@@ -432,6 +481,10 @@ func _spawn_perk_machine(id: String, p: Vector3) -> void:
 	light.light_color = glow
 	light.light_energy = 1.4
 	light.omni_range = 5.0
+	light.shadow_enabled = false
+	light.distance_fade_enabled = true
+	light.distance_fade_begin = 24.0
+	light.distance_fade_length = 6.0
 	root.add_child(light)
 	var body_col := StaticBody3D.new()
 	body_col.collision_layer = 1
@@ -473,6 +526,10 @@ func _spawn_mystery_box(p: Vector3) -> void:
 	light.light_color = Color(1.0, 0.75, 0.3)
 	light.light_energy = 2.4
 	light.omni_range = 7.0
+	light.shadow_enabled = false
+	light.distance_fade_enabled = true
+	light.distance_fade_begin = 28.0
+	light.distance_fade_length = 6.0
 	root.add_child(light)
 	root.add_to_group("mystery_box")
 	_root_props.add_child(root)
@@ -514,15 +571,15 @@ func _build_particles() -> void:
 	var kinds: Array = []
 	match theme:
 		"desert", "desert_night":
-			kinds.append({"kind": "dust", "color": Color(0.8, 0.7, 0.5), "amount": 90})
+			kinds.append({"kind": "dust", "color": Color(0.8, 0.7, 0.5), "amount": 40})
 		"jungle":
-			kinds.append({"kind": "firefly", "color": Color(0.7, 1.0, 0.4), "amount": 70})
+			kinds.append({"kind": "firefly", "color": Color(0.7, 1.0, 0.4), "amount": 32})
 		"railyard":
-			kinds.append({"kind": "snow", "color": Color(0.95, 0.97, 1.0), "amount": 260})
+			kinds.append({"kind": "snow", "color": Color(0.95, 0.97, 1.0), "amount": 110})
 		"mansion":
-			kinds.append({"kind": "dust", "color": Color(0.6, 0.5, 0.4), "amount": 60})
+			kinds.append({"kind": "dust", "color": Color(0.6, 0.5, 0.4), "amount": 28})
 	if data.get("sky", "day") == "night" and theme != "railyard":
-		kinds.append({"kind": "firefly", "color": Color(0.9, 0.6, 0.3), "amount": 40})
+		kinds.append({"kind": "firefly", "color": Color(0.9, 0.6, 0.3), "amount": 24})
 	for cfg in kinds:
 		_spawn_particles(cfg.kind, cfg.color, cfg.amount)
 

@@ -192,12 +192,17 @@ func _process(delta: float) -> void:
 	var blind := 0.0
 	if player.has_method("blind_factor"):
 		blind = player.blind_factor()
-	_flash_rect.color = Color(1, 1, 1, clampf(blind * 0.95, 0.0, 0.97))
+	var flash_a := clampf(blind * 0.95, 0.0, 0.97)
+	_flash_rect.visible = flash_a > 0.004
+	if _flash_rect.visible:
+		_flash_rect.color = Color(1, 1, 1, flash_a)
 	var low := clampf(1.0 - player.health / maxf(player.max_health, 1.0), 0.0, 1.0)
 	var hurt := maxf(damage_timer * 1.1, low * 0.55)
 	if player.health < 30.0 and player.alive:
 		hurt = maxf(hurt, 0.25 + sin(_time * 5.0) * 0.08)
-	_damage_rect.modulate = Color(1, 1, 1, hurt)
+	_damage_rect.visible = hurt > 0.004
+	if _damage_rect.visible:
+		_damage_rect.modulate = Color(1, 1, 1, hurt)
 	# Mira telescopica.
 	var scoped := (
 		player.alive

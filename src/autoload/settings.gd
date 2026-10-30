@@ -15,18 +15,20 @@ const DEFAULTS := {
 		"mode": 0,  # 0 ventana, 1 pantalla completa, 2 sin bordes
 		"width": 1600,
 		"height": 900,
-		"msaa": 2,
-		"ssao": true,
-		"ssil": true,
+		"msaa": 1,
+		"ssao": false,
+		"ssil": false,
+		"ssr": false,
 		"glow": true,
-		"vol_fog": true,
+		"vol_fog": false,
 		"shadows": 1,
 		"brightness": 1.0,
 		"fov": 90.0,
 		"view_fov": 60.0,
-		"vsync": true,
+		"vsync": false,
 		"motion_blur": 0.0,
-		"film_grain": 0.35,
+		"film_grain": 0.15,
+		"perf_v103": true,
 	},
 	"audio":
 	{
@@ -55,7 +57,7 @@ const DEFAULTS := {
 		"headshot_sound": true,
 		"blood": 1.0,
 		"auto_reload": false,
-		"show_fps": false,
+		"show_fps": true,
 		"language": "es",
 		"viewmodel_sway": 1.0,
 		"bob": 1.0,
@@ -203,7 +205,10 @@ func queue_save() -> void:
 func load_settings() -> void:
 	data = DEFAULTS.duplicate(true)
 	var cfg := ConfigFile.new()
-	if cfg.load(PATH) == OK:
+	var had_file := cfg.load(PATH) == OK
+	var had_perf_v103 := false
+	if had_file:
+		had_perf_v103 = bool(cfg.get_value("video", "perf_v103", false))
 		for section in cfg.get_sections():
 			if not data.has(section):
 				data[section] = {}
@@ -217,7 +222,20 @@ func load_settings() -> void:
 		for key in DEFAULTS[section].keys():
 			if not data[section].has(key):
 				data[section][key] = DEFAULTS[section][key]
+	# Migracion unica v1.0.3: desactiva post-procesos pesados heredados de versiones previas.
+	if had_file and not had_perf_v103:
+		data.video["msaa"] = 1
+		data.video["ssao"] = false
+		data.video["ssil"] = false
+		data.video["ssr"] = false
+		data.video["vol_fog"] = false
+		data.video["shadows"] = 1
+		data.video["vsync"] = false
+		data.video["perf_v103"] = true
+		data.gameplay["show_fps"] = true
 	_loaded = true
+	if had_file and not had_perf_v103:
+		queue_save()
 
 
 func apply_all() -> void:
@@ -277,6 +295,12 @@ func _apply_video() -> void:
 		var screen := DisplayServer.screen_get_size()
 		if size.x < screen.x and size.y < screen.y:
 			DisplayServer.window_set_position((screen - size) / 2)
+	if is_inside_tree():
+		for node in get_tree().get_nodes_in_group("world_environment"):
+			if node is WorldEnvironment:
+				var we := node as WorldEnvironment
+				if we.environment != null:
+					apply_environment(we.environment)
 
 
 func _apply_audio() -> void:
@@ -314,15 +338,27 @@ func _set_bus_volume(bus_name: String, linear: float) -> void:
 func apply_environment(env: Environment) -> void:
 	if env == null:
 		return
-	var ssao: bool = data.video.get("ssao", true)
-	var ssil: bool = data.video.get("ssil", true)
-	var glow: bool = data.video.get("glow", true)
-	var fog: bool = data.video.get("vol_fog", true)
+	var ssao: bool = bool(data.video.get("ssao", false))
+	var ssil: bool = bool(data.video.get("ssil", false))
+	var ssr: bool = bool(data.video.get("ssr", false))
+	var glow: bool = bool(data.video.get("glow", true))
+	var fog: bool = bool(data.video.get("vol_fog", false))
 	env.ssao_enabled = ssao
 	env.ssil_enabled = ssil
+	env.ssr_enabled = ssr
 	env.glow_enabled = glow
 	env.volumetric_fog_enabled = fog
-	env.fog_enabled = false
+	if fog:
+		env.fog_enabled = false
+		env.volumetric_fog_density = float(env.get_meta("volumetric_density", 0.01))
+		env.volumetric_fog_albedo = env.get_meta("volumetric_color", Color(0.82, 0.86, 0.78))
+		env.volumetric_fog_length = 72.0
+		env.volumetric_fog_detail_spread = 1.4
+	else:
+		env.fog_enabled = true
+		env.fog_light_color = env.get_meta("volumetric_color", Color(0.7, 0.68, 0.6))
+		env.fog_density = float(env.get_meta("volumetric_density", 0.008)) * 0.22
+		env.fog_aerial_perspective = 0.35
 	env.tonemap_exposure = float(data.video.get("brightness", 1.0))
 	env.adjustment_enabled = true
 	env.adjustment_brightness = float(data.video.get("brightness", 1.0))
@@ -330,23 +366,28 @@ func apply_environment(env: Environment) -> void:
 	env.adjustment_saturation = 1.06
 	var viewport := get_viewport()
 	if viewport:
-		var scale: int = int(data.video.get("msaa", 2))
-		viewport.msaa_3d = scale
+		var aa_scale: int = clampi(int(data.video.get("msaa", 1)), 0, 3)
+		viewport.msaa_3d = aa_scale
 		viewport.screen_space_aa = (
-			Viewport.SCREEN_SPACE_AA_FXAA if scale >= 1 else Viewport.SCREEN_SPACE_AA_DISABLED
+			Viewport.SCREEN_SPACE_AA_FXAA if aa_scale == 0 else Viewport.SCREEN_SPACE_AA_DISABLED
 		)
-	var shadows: int = int(data.video.get("shadows", 1))
-	var sizes := [2048, 4096, 8192]
+	var shadows: int = clampi(int(data.video.get("shadows", 1)), 0, 2)
+	var sizes := [1024, 2048, 4096]
 	if env.ssao_enabled:
-		env.ssao_radius = 1.6
-		env.ssao_intensity = 2.4
-		env.ssao_power = 1.6
-	if env.volumetric_fog_enabled:
-		env.volumetric_fog_density = 0.012
-		env.volumetric_fog_albedo = Color(0.82, 0.86, 0.78)
-		env.volumetric_fog_length = 80.0
-		env.volumetric_fog_detail_spread = 1.6
-	RenderingServer.directional_shadow_atlas_set_size(sizes[clampi(shadows, 0, 2)], true)
+		env.ssao_radius = 1.5
+		env.ssao_intensity = 2.0
+		env.ssao_power = 1.5
+	RenderingServer.directional_shadow_atlas_set_size(sizes[shadows], true)
+	if is_inside_tree():
+		for snode in get_tree().get_nodes_in_group("sun_light"):
+			if snode is DirectionalLight3D:
+				var sun_l := snode as DirectionalLight3D
+				sun_l.directional_shadow_mode = (
+					DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+					if shadows >= 2
+					else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+				)
+				sun_l.directional_shadow_max_distance = 95.0 if shadows >= 2 else 68.0
 
 
 ## Volcado legible para la consola / pantalla de opciones.

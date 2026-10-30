@@ -73,8 +73,14 @@ static func _cyl(
 	return mi
 
 
-## Genera un arma. El eje +Z del nodo apunta en la direccion de disparo.
-static func build(def: Dictionary) -> Node3D:
+## Genera un arma (usa los modelos .mdl originales de CS 1.5; fallback procedural).
+static func build(def: Dictionary, upright: bool = true) -> Node3D:
+	var wid := String(def.get("id", ""))
+	if wid != "":
+		var cs_mdl := MdlLoader.build_world_weapon(wid, upright)
+		if cs_mdl != null:
+			cs_mdl.name = "WeaponModel"
+			return cs_mdl
 	_materials()
 	var root := Node3D.new()
 	root.name = "WeaponModel"

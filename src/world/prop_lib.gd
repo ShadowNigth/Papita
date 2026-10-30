@@ -219,14 +219,17 @@ static func street_lamp(theme: String, lit: bool = false) -> Node3D:
 		var light := OmniLight3D.new()
 		light.position = Vector3(1.05, 4.1, 0)
 		light.light_color = Color(1.0, 0.82, 0.58)
-		light.light_energy = 2.2
-		light.omni_range = 12.0
+		light.light_energy = 2.0
+		light.omni_range = 11.0
 		light.shadow_enabled = false
+		light.distance_fade_enabled = true
+		light.distance_fade_begin = 28.0
+		light.distance_fade_length = 8.0
 		root.add_child(light)
 	return root
 
 
-static func hanging_lamp(theme: String, energy: float = 2.4) -> Node3D:
+static func hanging_lamp(theme: String, energy: float = 2.2) -> Node3D:
 	var root := Node3D.new()
 	root.name = "HangingLamp"
 	var metal := MaterialLib.surface("metal", theme)
@@ -242,8 +245,11 @@ static func hanging_lamp(theme: String, energy: float = 2.4) -> Node3D:
 	light.position = Vector3(0, 2.6, 0)
 	light.light_color = Color(1.0, 0.88, 0.7)
 	light.light_energy = energy
-	light.omni_range = 10.0
-	light.shadow_enabled = true
+	light.omni_range = 9.5
+	light.shadow_enabled = false
+	light.distance_fade_enabled = true
+	light.distance_fade_begin = 26.0
+	light.distance_fade_length = 7.0
 	root.add_child(light)
 	return root
 

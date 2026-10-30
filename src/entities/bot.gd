@@ -66,6 +66,8 @@ func setup_bot(
 	reaction_left = float(diff.get("reaction", 0.35))
 	objective = global_position
 	patrol_point = global_position
+	think_timer = _rng.randf_range(0.02, 0.22)
+	repath_timer = _rng.randf_range(0.05, 0.35)
 	select_slot(Content.SLOT_KNIFE)
 
 
@@ -83,6 +85,8 @@ func setup_zombie(
 	armor = float(zombie_data.get("armor", 0.0)) * 100.0
 	is_bot = true
 	move_speed_scale = float(zombie_data.get("speed", 2.2)) / BASE_SPEED
+	think_timer = _rng.randf_range(0.03, 0.28)
+	repath_timer = _rng.randf_range(0.05, 0.4)
 	add_to_group("bot")
 	if actor_model:
 		actor_model.set_name_tag("")
@@ -96,7 +100,7 @@ func _physics_process(delta: float) -> void:
 	think_timer -= delta
 	repath_timer -= delta
 	if think_timer <= 0.0:
-		think_timer = 0.16 if not is_zombie_ai else 0.25
+		think_timer = (0.18 if not is_zombie_ai else 0.26) + _rng.randf_range(0.0, 0.05)
 		_think()
 	if is_zombie_ai:
 		_zombie_movement(delta)
