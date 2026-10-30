@@ -1,0 +1,9 @@
+# Godot
+.godot/
+export_presets.cfg
+*.translation
+
+# Herramientas locales
+.venv-gdt/
+__pycache__/
+*.pyc

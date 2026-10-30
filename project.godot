@@ -1,0 +1,57 @@
+; Papita: Counter-Strike 1.5 Reforged
+; Proyecto personal, reimplementacion limpia en Godot 4.4
+
+config_version=5
+
+[application]
+
+config/name="Papita: CS 1.5 Reforged"
+config/description="Reimplementacion completa del clasico CS 1.5 en Godot 4: armas, economia, bombas, bots, modo zombie, mapas originales, materiales PBR procedurales e iluminacion avanzada."
+config/version="1.0.0"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.4", "Forward Plus")
+config/icon="res://icon.svg"
+boot_splash/bg_color=Color(0.035, 0.04, 0.035, 1)
+boot_splash/show_image=false
+config/windows_native_icon="res://icon.svg"
+
+[autoload]
+
+Settings="*res://src/autoload/settings.gd"
+I18n="*res://src/autoload/i18n.gd"
+AudioBank="*res://src/autoload/audio_bank.gd"
+Content="*res://src/autoload/content.gd"
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+window/size/mode=0
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/vsync/vsync_mode=1
+
+[gui]
+
+theme/default_font_multichannel_signed_distance_field=true
+
+[physics]
+
+common/physics_ticks_per_second=100
+common/max_physics_steps_per_frame=8
+3d/default_gravity=20.0
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
+textures/default_filters/anisotropic_filtering_level=3
+anti_aliasing/quality/msaa_3d=1
+anti_aliasing/quality/screen_space_aa=1
+lights_and_shadows/directional_shadow/size=4096
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
+environment/defaults/default_clear_color=Color(0.05, 0.055, 0.05, 1)
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=false
+pointing/emulate_mouse_from_touch=false
