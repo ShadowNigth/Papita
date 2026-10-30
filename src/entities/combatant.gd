@@ -54,6 +54,7 @@ var reload_total := 0.0
 var reloading_id := ""
 var next_fire_time := 0.0
 var burst_left := 0
+var burst_mode_weapons: Dictionary = {}
 var zoom_level := 0
 var zoom_max := 0
 var recoil_pitch := 0.0
@@ -251,22 +252,21 @@ func _apply_movement(delta: float) -> void:
 				_rng.randf_range(0.95, 1.05),
 				18.0
 			)
+		elif velocity.y <= 0.0:
+			velocity.y = -0.5
 	else:
 		if wish.length() > 0.05:
 			velocity.x = move_toward(velocity.x, wish.x * target_speed, 2.2 * delta * target_speed)
 			velocity.z = move_toward(velocity.z, wish.z * target_speed, 2.2 * delta * target_speed)
-		velocity.y -= GRAVITY * delta
-	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
 		want_jump = false
 	# Crouch: agacha el cuerpo.
 	var target_crouch := want_crouch and is_on_floor()
 	if crouching != target_crouch:
 		crouching = target_crouch
-		var target_h := 1.15 if crouching else 1.8
 		capsule.height = 1.8 if not crouching else 1.15
 		collision_shape.position.y = capsule.height * 0.5
-	# Paso automatico (escaleras bajas).
+	# Paso automatico (solo escalones reales, nunca en suelo plano).
 	velocity = velocity.limit_length(30.0)
 	move_and_slide()
 	if is_on_floor() and wish.length() > 0.1 and get_slide_collision_count() > 0:
@@ -277,16 +277,64 @@ func _apply_movement(delta: float) -> void:
 	_was_grounded = is_on_floor()
 
 
+func _has_horizontal_step_collision(wish: Vector3) -> bool:
+	var flat_wish := Vector3(wish.x, 0.0, wish.z)
+	if flat_wish.length_squared() < 0.0025:
+		return false
+	flat_wish = flat_wish.normalized()
+	for i in get_slide_collision_count():
+		var col := get_slide_collision(i)
+		if col == null:
+			continue
+		var n := col.get_normal()
+		if absf(n.y) < 0.35:
+			var flat_n := Vector3(n.x, 0.0, n.z)
+			if flat_n.length_squared() > 0.0001 and flat_n.normalized().dot(flat_wish) < -0.2:
+				return true
+	return false
+
+
 func _step_up(wish: Vector3) -> void:
-	var probe := global_transform
-	probe.origin.y += 0.3
-	if test_move(global_transform, Vector3(0, 0.32, 0)):
+	var max_step := 0.34
+	if not _has_horizontal_step_collision(wish):
 		return
-	var forward := wish.normalized() * 0.28
-	if test_move(probe, forward * 1.0):
+	if test_move(global_transform, Vector3(0.0, max_step, 0.0)):
 		return
-	global_position.y += 0.3
-	velocity.y = minf(velocity.y, 0.0)
+	var raised := global_transform
+	raised.origin.y += max_step
+	var forward := Vector3(wish.x, 0.0, wish.z).normalized() * 0.16
+	if test_move(raised, forward):
+		return
+	var fwd_xf := raised.translated(forward)
+	if not test_move(fwd_xf, Vector3(0.0, -max_step - 0.03, 0.0)):
+		return
+	var lo := 0.0
+	var hi := max_step + 0.03
+	for _iter in 5:
+		var mid := (lo + hi) * 0.5
+		if test_move(fwd_xf, Vector3(0.0, -mid, 0.0)):
+			hi = mid
+		else:
+			lo = mid
+	var step_delta := max_step - lo
+	if step_delta <= 0.02 or step_delta > max_step + 0.01:
+		return
+	var space := get_world_3d().direct_space_state
+	var rq := PhysicsRayQueryParameters3D.new()
+	rq.from = fwd_xf.origin + Vector3(0.0, 0.15, 0.0)
+	rq.to = fwd_xf.origin - Vector3(0.0, max_step + 0.15, 0.0)
+	rq.collision_mask = 1
+	var hit := space.intersect_ray(rq)
+	if not hit.is_empty() and Vector3(hit.normal).y < 0.7:
+		return
+	var old_y := global_position.y
+	global_position = Vector3(fwd_xf.origin.x, old_y + step_delta + 0.004, fwd_xf.origin.z)
+	velocity.y = -0.5
+	_on_stepped_up(step_delta)
+
+
+func _on_stepped_up(_step_delta: float) -> void:
+	pass
 
 
 func _handle_footsteps(delta: float) -> void:
@@ -461,6 +509,8 @@ func reload() -> void:
 		reload_total *= 0.55
 	reload_time_left = reload_total
 	reloading_id = current_id
+	burst_left = 0
+	zoom_level = 0
 	if is_player:
 		AudioBank.weapon_reload_step(reloading_id, 0, true, get_parent(), global_position)
 		_play_reload_sequence(def)
@@ -475,7 +525,7 @@ func _on_reload_started(_duration: float) -> void:
 	pass
 
 
-func _on_melee_attacked(_hit: bool) -> void:
+func _on_melee_attacked(_hit: bool, _heavy: bool = false) -> void:
 	pass
 
 
@@ -552,11 +602,46 @@ func can_fire() -> bool:
 	return a.x > 0
 
 
-func _handle_weapon(delta: float) -> void:
+func is_burst_mode_active(wid: String = "") -> bool:
+	var id := wid if wid != "" else current_id
+	var def := Content.get_weapon(id)
+	if int(def.get("burst", 0)) <= 1:
+		return false
+	if bool(def.get("burst_toggle", false)):
+		return bool(burst_mode_weapons.get(id, false))
+	return true
+
+
+func fire_mode_label() -> String:
+	var def := current_def()
+	if is_burst_mode_active():
+		return "RAFAGA x%d" % int(def.get("burst", 3))
+	return "AUTO" if bool(def.get("auto", false)) else "SEMI"
+
+
+func toggle_fire_mode() -> String:
+	var def := current_def()
+	if not bool(def.get("burst_toggle", false)) or reload_time_left > 0.0:
+		return ""
+	var enabled: bool = not bool(burst_mode_weapons.get(current_id, false))
+	burst_mode_weapons[current_id] = enabled
+	burst_left = 0
+	next_fire_time = maxf(next_fire_time, _now() + 0.22)
+	if is_player:
+		AudioBank.play_2d("fire_mode", -4.0)
+	weapon_state_changed.emit(self)
+	if enabled:
+		return "Cambiado a rafaga de %d disparos" % int(def.get("burst", 3))
+	if bool(def.get("auto", false)):
+		return "Cambiado a modo automatico"
+	return "Cambiado a modo semiautomatico"
+
+
+func _handle_weapon(_delta: float) -> void:
 	if not wants_fire:
 		trigger_was_down = false
-		burst_left = 0
 	if not alive or frozen:
+		burst_left = 0
 		return
 	var def := current_def()
 	if current_slot == Content.SLOT_GRENADE:
@@ -566,26 +651,33 @@ func _handle_weapon(delta: float) -> void:
 		return
 	if current_slot == Content.SLOT_KNIFE:
 		if wants_fire and _now() >= next_fire_time:
-			_melee_attack()
+			_melee_attack(false)
 			wants_fire = false
 		return
 	if current_slot == Content.SLOT_C4:
 		return
 	if reload_time_left > 0.0:
+		burst_left = 0
 		return
-	var auto: bool = def.get("auto", false)
-	var burst: int = int(def.get("burst", 0))
+	var burst_active := is_burst_mode_active()
+	var burst_count: int = int(def.get("burst", 0)) if burst_active else 0
+	var burst_rpm: float = float(def.get("burst_rpm", maxf(float(def.get("rpm", 600)), 900.0)))
+	var burst_cd: float = float(def.get("burst_cooldown", 0.4))
 	if burst_left > 0:
 		if _now() >= next_fire_time:
 			if reload_time_left <= 0.0 and current_ammo().x > 0:
 				_do_fire()
 				burst_left -= 1
-				next_fire_time = _now() + 60.0 / maxf(float(def.get("rpm", 300)), 30.0)
+				if burst_left > 0:
+					next_fire_time = _now() + 60.0 / maxf(burst_rpm, 60.0)
+				else:
+					next_fire_time = _now() + burst_cd
 			else:
 				burst_left = 0
 		return
 	if not wants_fire:
 		return
+	var auto: bool = bool(def.get("auto", false)) and not burst_active
 	if not auto:
 		if trigger_was_down:
 			return
@@ -602,10 +694,14 @@ func _handle_weapon(delta: float) -> void:
 		if Settings.data.gameplay.get("auto_reload", false):
 			reload()
 		return
-	if burst > 1:
-		burst_left = burst - 1
+	# En Deathmatch el disparo rompe la proteccion temporal de reaparicion.
+	if invulnerable and has_meta("dm_spawn_shield"):
+		invulnerable = false
+		set_meta("dm_spawn_shield", false)
+	if burst_count > 1:
+		burst_left = burst_count - 1
 		_do_fire()
-		next_fire_time = _now() + 60.0 / maxf(float(def.get("rpm", 300)), 30.0)
+		next_fire_time = _now() + 60.0 / maxf(burst_rpm, 60.0)
 		return
 	_do_fire()
 
@@ -687,6 +783,8 @@ func _current_spread(def: Dictionary) -> float:
 		spread *= 0.62
 	if want_walk:
 		spread *= 0.8
+	if current_id == "famas" and is_burst_mode_active():
+		spread *= 0.68
 	if zoom_level > 0:
 		spread *= 0.35
 	spread += recoil_pitch * 90.0 * 0.12
@@ -913,6 +1011,8 @@ func _drop_weapon() -> void:
 	if primary_id == "":
 		return
 	var game := get_tree().get_first_node_in_group("game")
+	if game and String(game.get("mode")) == "deathmatch":
+		return
 	if game and game.has_method("spawn_pickup"):
 		var a: Vector2i = ammo.get(primary_id, Vector2i(0, 0))
 		game.call(
@@ -973,9 +1073,21 @@ func slow(amount: float, duration: float) -> void:
 # --- Combate cuerpo a cuerpo y granadas ---------------------------------------
 
 
-func _melee_attack() -> void:
+func alt_melee_attack() -> void:
+	if not alive or frozen or current_slot != Content.SLOT_KNIFE:
+		return
+	if _now() < next_fire_time:
+		return
+	_melee_attack(true)
+
+
+func _melee_attack(heavy: bool = false) -> void:
+	if invulnerable and has_meta("dm_spawn_shield"):
+		invulnerable = false
+		set_meta("dm_spawn_shield", false)
 	var def := current_def()
-	next_fire_time = _now() + 60.0 / maxf(float(def.get("rpm", 120)), 20.0)
+	var rpm := float(def.get("stab_rpm", 60.0) if heavy else def.get("rpm", 120.0))
+	next_fire_time = _now() + 60.0 / maxf(rpm, 20.0)
 	AudioBank.play_at(
 		"knife_swing", get_parent(), global_position, -4.0, _rng.randf_range(0.9, 1.1), 22.0
 	)
@@ -984,11 +1096,12 @@ func _melee_attack() -> void:
 	var space := get_world_3d().direct_space_state
 	var origin := global_position + Vector3(0, 1.2, 0)
 	var forward := get_fire_direction()
+	var reach := 1.75 if heavy else 2.05
 	for i in 2:
 		var dir := forward if i == 0 else (forward + Vector3(0, -0.25, 0)).normalized()
 		var query := PhysicsRayQueryParameters3D.new()
 		query.from = origin
-		query.to = origin + dir * 2.0
+		query.to = origin + dir * reach
 		query.collision_mask = 1 | PLAYER_LAYER
 		var excl: Array[RID] = [get_rid()]
 		query.exclude = excl
@@ -1002,28 +1115,38 @@ func _melee_attack() -> void:
 				continue
 			if victim.team != team or victim.is_hostage:
 				var back := victim.global_transform.basis.z.dot(get_fire_direction()) > 0.25
-				var dmg := (
-					float(def.get("back_damage", 90.0)) if back else float(def.get("damage", 40.0))
-				)
+				var dmg := 40.0
+				if heavy:
+					dmg = (
+						float(def.get("stab_back_damage", 180.0))
+						if back
+						else float(def.get("stab_damage", 65.0))
+					)
+				else:
+					dmg = (
+						float(def.get("back_damage", 90.0))
+						if back
+						else float(def.get("damage", 40.0))
+					)
 				victim.take_damage(dmg, self, "chest", "knife")
 				total_hits += 1
 				hit_confirmed.emit(self, victim, dmg, back)
-				Fx.blood(get_parent(), hit.position, -dir, 18 if back else 10)
+				Fx.blood(get_parent(), hit.position, -dir, 18 if (back or heavy) else 10)
 				AudioBank.play_at(
-					"knife_stab" if back else "knife_hit",
+					"knife_stab" if (back or heavy) else "knife_hit",
 					get_parent(),
 					hit.position,
 					0.0,
 					1.0,
 					25.0
 				)
-				_on_melee_attacked(true)
+				_on_melee_attacked(true, heavy)
 				return
 		Fx.impact(get_parent(), hit.position, hit.normal, "concrete")
 		AudioBank.play_at("knife_wall", get_parent(), hit.position, -3.0, 1.0, 20.0)
-		_on_melee_attacked(true)
+		_on_melee_attacked(true, heavy)
 		return
-	_on_melee_attacked(false)
+	_on_melee_attacked(false, heavy)
 
 
 func _throw_grenade() -> void:
@@ -1070,13 +1193,15 @@ func toggle_silencer() -> void:
 func toggle_zoom() -> void:
 	var def := current_def()
 	var z: float = float(def.get("zoom", 0.0))
-	if z <= 0.0:
+	if z <= 0.0 or reload_time_left > 0.0:
 		return
-	zoom_max = 1
-	zoom_level = 0 if zoom_level > 0 else 1
+	var is_sniper := String(def.get("cls", "")) == "sniper"
+	zoom_max = 2 if is_sniper else 1
+	zoom_level = (zoom_level + 1) % (zoom_max + 1)
 	if is_player:
 		AudioBank.play_2d("zoom", -4.0)
-	next_fire_time = _now() + 0.2
+	next_fire_time = maxf(next_fire_time, _now() + 0.16)
+	weapon_state_changed.emit(self)
 
 
 func get_fire_origin() -> Vector3:

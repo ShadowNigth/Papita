@@ -7,7 +7,7 @@ config_version=5
 
 config/name="Papita: CS 1.5 Reforged"
 config/description="Reimplementacion completa del clasico CS 1.5 en Godot 4: armas, economia, bombas, bots, modo zombie, mapas originales, materiales PBR procedurales e iluminacion avanzada."
-config/version="1.0.5"
+config/version="1.0.6"
 run/main_scene="res://main.tscn"
 config/features=PackedStringArray("4.4", "Forward Plus")
 config/icon="res://icon.svg"

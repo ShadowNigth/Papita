@@ -200,15 +200,18 @@ func on_fire() -> void:
 		tw2.tween_property(_flash_light, "light_energy", 0.0, 0.06)
 
 
-func on_knife(hit: bool = false) -> void:
+func on_knife(hit: bool = false, heavy: bool = false) -> void:
 	if _using_mdl:
-		if hit:
-			_play_action(["stab", "midslash1", "slash1"])
+		if heavy:
+			if hit:
+				_play_action(["stab", "midslash1", "slash1"])
+			else:
+				_play_action(["stab_miss", "stab", "midslash1"])
 		else:
 			_shot_idx = (_shot_idx + 1) % 2
-			_play_action(["slash1" if _shot_idx == 0 else "slash2", "midslash1"])
+			_play_action(["midslash1", "slash1"] if _shot_idx == 0 else ["midslash2", "slash2"])
 	else:
-		_kick = 0.06
+		_kick = 0.09 if heavy else 0.06
 
 
 func on_grenade_throw() -> void:

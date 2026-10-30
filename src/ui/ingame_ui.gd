@@ -545,8 +545,14 @@ func _build_death() -> void:
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(sub)
 	var tip := UITheme.label("Observa a tu equipo hasta la proxima ronda", 12, UITheme.TEXT_DIM)
+	tip.name = "TipLabel"
 	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(tip)
+
+
+func hide_death() -> void:
+	if _death_panel:
+		_death_panel.visible = false
 
 
 func show_death(killer: String) -> void:
@@ -557,7 +563,15 @@ func show_death(killer: String) -> void:
 	var l := _death_panel.find_child("KillerLabel", true, false) as Label
 	if l:
 		l.text = "Eliminado por %s" % (killer if killer != "" else "el entorno")
-	var t := get_tree().create_timer(3.0, true, false, true)
+	var tip := _death_panel.find_child("TipLabel", true, false) as Label
+	if tip:
+		tip.text = (
+			"Reapareciendo en una nueva posicion del mapa..."
+			if game.mode == "deathmatch"
+			else "Observa a tu equipo hasta la proxima ronda"
+		)
+	var dur := 1.35 if game.mode == "deathmatch" else 3.0
+	var t := get_tree().create_timer(dur, true, false, true)
 	t.timeout.connect(func() -> void: _death_panel.visible = false)
 
 

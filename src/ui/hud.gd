@@ -203,11 +203,13 @@ func _process(delta: float) -> void:
 	_damage_rect.visible = hurt > 0.004
 	if _damage_rect.visible:
 		_damage_rect.modulate = Color(1, 1, 1, hurt)
-	# Mira telescopica.
+	# Mira telescopica (solo rifles francotiradores; AUG y SG552 usan zoom limpio como en CS 1.5).
+	var def_now := player.current_def()
 	var scoped := (
 		player.alive
 		and player.zoom_level > 0
-		and float(player.current_def().get("zoom", 0.0)) > 0.0
+		and float(def_now.get("zoom", 0.0)) > 0.0
+		and String(def_now.get("cls", "")) == "sniper"
 	)
 	_scope_rect.visible = scoped
 	if scoped:
@@ -253,7 +255,12 @@ func _txt(
 func _draw_crosshair(vp: Vector2, s: float) -> void:
 	if not player.alive or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return
-	if player.zoom_level > 0 and float(player.current_def().get("zoom", 0.0)) > 0.0:
+	var cdef := player.current_def()
+	if (
+		player.zoom_level > 0
+		and float(cdef.get("zoom", 0.0)) > 0.0
+		and String(cdef.get("cls", "")) == "sniper"
+	):
 		return
 	if game.ingame_ui and game.ingame_ui.get("buy_open"):
 		return
@@ -397,9 +404,7 @@ func _draw_ammo(vp: Vector2, s: float) -> void:
 		330 * s,
 		font_bold
 	)
-	var mode_txt := "AUTO" if def.get("auto", false) else "SEMI"
-	if int(def.get("burst", 0)) > 1:
-		mode_txt = "RAFAGA x%d" % int(def.get("burst", 0))
+	var mode_txt := player.fire_mode_label()
 	if not player.grenades.is_empty():
 		mode_txt += "   GRANADAS %d" % player.grenades.size()
 	_txt(
@@ -479,7 +484,9 @@ func _draw_top(vp: Vector2, s: float) -> void:
 		font_bold
 	)
 	var sub := "RONDA %d" % game.round_number
-	if game.round_state == "freeze":
+	if game.mode == "deathmatch":
+		sub = "DEATHMATCH - META %d" % MatchGame.DM_FRAG_LIMIT
+	elif game.round_state == "freeze":
 		sub = "CONGELADO - COMPRA"
 	_txt(
 		Vector2(center - 120 * s, y + 42 * s),
@@ -489,6 +496,21 @@ func _draw_top(vp: Vector2, s: float) -> void:
 		HORIZONTAL_ALIGNMENT_CENTER,
 		240 * s
 	)
+	if (
+		game.mode == "deathmatch"
+		and player.alive
+		and player.has_meta("dm_spawn_shield")
+		and bool(player.get_meta("dm_spawn_shield"))
+	):
+		_txt(
+			Vector2(center - 140 * s, 78 * s),
+			"PROTECCION DE REAPARICION",
+			int(13 * s),
+			UITheme.ACCENT,
+			HORIZONTAL_ALIGNMENT_CENTER,
+			280 * s,
+			font_bold
+		)
 	if game.bomb and game.bomb.planted:
 		var blink := 0.5 + 0.5 * sin(_time * 8.0)
 		draw_rect(

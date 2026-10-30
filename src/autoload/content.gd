@@ -171,7 +171,10 @@ const WEAPONS := {
 		"price": 0,
 		"damage": 40,
 		"back_damage": 90,
+		"stab_damage": 65,
+		"stab_back_damage": 180,
 		"rpm": 120,
+		"stab_rpm": 60,
 		"mag": 0,
 		"reserve": 0,
 		"reload": 0.0,
@@ -182,7 +185,7 @@ const WEAPONS := {
 		"speed_mult": 1.12,
 		"award": 1500,
 		"sound": "knife",
-		"desc": "Silencioso y letal por la espalda.",
+		"desc": "Silencioso y letal: click derecho apunala con fuerza.",
 		"vm": {"len": 0.22, "color": Color(0.7, 0.72, 0.75), "kind": "knife"},
 	},
 	"glock18":
@@ -209,12 +212,15 @@ const WEAPONS := {
 		"min_mult": 0.55,
 		"auto": false,
 		"burst": 3,
+		"burst_toggle": true,
+		"burst_rpm": 1100,
+		"burst_cooldown": 0.42,
 		"penetration": 1,
 		"speed_mult": 1.02,
 		"award": 300,
 		"sound": "pistol",
 		"silencer": false,
-		"desc": "Cadencia altisima y rafaga de 3. Estandar T.",
+		"desc": "Click derecho alterna semiautomatica y rafaga de 3 tiros.",
 		"vm": {"len": 0.3, "color": Color(0.22, 0.23, 0.25), "kind": "pistol"},
 	},
 	"usp45":
@@ -602,7 +608,7 @@ const WEAPONS := {
 		"price": 2250,
 		"damage": 30,
 		"armor_pen": 0.7,
-		"rpm": 900,
+		"rpm": 750,
 		"mag": 25,
 		"reserve": 90,
 		"reload": 2.6,
@@ -616,11 +622,14 @@ const WEAPONS := {
 		"min_mult": 0.65,
 		"auto": true,
 		"burst": 3,
+		"burst_toggle": true,
+		"burst_rpm": 1050,
+		"burst_cooldown": 0.4,
 		"penetration": 2,
 		"speed_mult": 1.0,
 		"award": 300,
 		"sound": "rifle",
-		"desc": "Rafaga de 3 tiros a 900 RPM. Economica y letal.",
+		"desc": "Click derecho alterna fuego automatico y rafaga de 3 tiros.",
 		"vm": {"len": 0.75, "color": Color(0.16, 0.17, 0.18), "kind": "rifle", "bullpup": true},
 	},
 	"galil":
@@ -1375,7 +1384,10 @@ func map_by_id(id: String) -> Dictionary:
 func maps_for_mode(mode: String) -> Array:
 	var out: Array = []
 	for m in MAPS:
-		if m.mode == mode:
+		if mode == "deathmatch":
+			if m.mode == "bomb" or m.mode == "hostage":
+				out.append(m)
+		elif m.mode == mode:
 			out.append(m)
 	return out
 

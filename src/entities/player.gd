@@ -21,14 +21,18 @@ var _pitch := 0.0
 var _target_fov := 90.0
 var _base_fov := 90.0
 var _shake := 0.0
-var _bob_t := 0.0
 var _use_hold := 0.0
 var _scoped := false
-var _ads := false
 var _dead_time := 0.0
 var _last_health := 100.0
 var _last_vm_id := ""
 var _mouse_accum := Vector2.ZERO
+var _eye_y := 1.62
+var _step_offset_y := 0.0
+var _roll := 0.0
+var _prev_body_pos := Vector3.ZERO
+var _curr_body_pos := Vector3.ZERO
+var _pos_initialized := false
 
 
 func _ready() -> void:
@@ -46,7 +50,8 @@ func _ready() -> void:
 func _build_view() -> void:
 	camera_rig = Node3D.new()
 	camera_rig.name = "CameraRig"
-	camera_rig.position = Vector3(0, 1.62, 0)
+	camera_rig.top_level = true
+	camera_rig.position = global_position + Vector3(0, 1.62, 0)
 	add_child(camera_rig)
 	camera = Camera3D.new()
 	camera.name = "Camera"
@@ -159,27 +164,35 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _alt_fire() -> void:
+	if current_slot == Content.SLOT_KNIFE:
+		alt_melee_attack()
+		return
 	var def := current_def()
 	var zoom: float = float(def.get("zoom", 0.0))
 	if zoom > 0.0:
 		toggle_zoom()
 		_scoped = zoom_level > 0
+		var is_sniper := String(def.get("cls", "")) == "sniper"
 		if viewmodel:
-			viewmodel.set_ads(_scoped, true)
+			viewmodel.set_ads(_scoped and not is_sniper, _scoped and is_sniper)
 		if not _scoped:
 			_target_fov = _base_fov
 	elif bool(def.get("silencer", false)):
 		toggle_silencer()
-	else:
-		_ads = not _ads
+	elif bool(def.get("burst_toggle", false)):
+		var msg := toggle_fire_mode()
+		if msg != "":
+			var game := get_tree().get_first_node_in_group("game")
+			if game:
+				game.emit_signal("message", msg.to_upper(), Color(0.95, 0.86, 0.45), 1.8)
 
 
 func _look(relative: Vector2) -> void:
 	var factor := mouse_sensitivity * 0.0022
-	if _scoped:
-		factor *= 0.42
-	elif _ads:
-		factor *= 0.8
+	if zoom_level == 1:
+		factor *= 0.52
+	elif zoom_level >= 2:
+		factor *= 0.26
 	var invert: float = -1.0 if bool(Settings.data.gameplay.get("invert_y", false)) else 1.0
 	_mouse_accum += relative
 	rotate_y(-relative.x * factor)
@@ -190,9 +203,7 @@ func _look(relative: Vector2) -> void:
 func _apply_camera_rotation() -> void:
 	if camera_rig == null:
 		return
-	camera_rig.rotation.x = _pitch
-	camera_rig.rotation.y = recoil_yaw
-	camera_rig.position.x = sin(recoil_yaw * 3.0) * 0.02
+	camera_rig.global_rotation = Vector3(_pitch, global_rotation.y + recoil_yaw, _roll)
 
 
 func apply_shake(amount: float) -> void:
@@ -211,17 +222,39 @@ func _apply_player_recoil(r: float, _def: Dictionary) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if not _pos_initialized or _curr_body_pos.distance_squared_to(global_position) > 9.0:
+		_prev_body_pos = global_position
+		_curr_body_pos = global_position
+		_pos_initialized = true
+	else:
+		_prev_body_pos = _curr_body_pos
 	if not alive:
 		_dead_time += delta
-		_update_camera_dead(delta)
 		super._physics_process(delta)
+		_curr_body_pos = global_position
 		return
 	_gather_input(delta)
 	super._physics_process(delta)
+	_curr_body_pos = global_position
+	_sync_viewmodel()
+
+
+func _process(delta: float) -> void:
+	if not is_inside_tree() or camera_rig == null:
+		return
+	if not _pos_initialized or _curr_body_pos.distance_squared_to(global_position) > 9.0:
+		_prev_body_pos = global_position
+		_curr_body_pos = global_position
+		_pos_initialized = true
+	if not alive:
+		_update_camera_dead(delta)
+		return
 	_sync_viewmodel()
 	_update_camera(delta)
-	if input_enabled and wants_fire and current_id != "":
-		pass
+
+
+func _on_stepped_up(step_delta: float) -> void:
+	_step_offset_y = clampf(_step_offset_y - step_delta, -0.36, 0.36)
 
 
 func _sync_viewmodel() -> void:
@@ -239,9 +272,9 @@ func _on_reload_started(duration: float) -> void:
 		viewmodel.start_reload(duration)
 
 
-func _on_melee_attacked(hit: bool) -> void:
+func _on_melee_attacked(hit: bool, heavy: bool = false) -> void:
 	if viewmodel:
-		viewmodel.on_knife(hit)
+		viewmodel.on_knife(hit, heavy)
 
 
 func _on_grenade_thrown() -> void:
@@ -301,37 +334,43 @@ func _delta_safe() -> float:
 func _update_camera(delta: float) -> void:
 	if camera_rig == null:
 		return
-	var target_y := 1.62
-	if crouching:
-		target_y = 1.02
-	if not is_on_floor():
-		target_y += 0.03
-	camera_rig.position.y = lerpf(camera_rig.position.y, target_y, clampf(delta * 12.0, 0.0, 1.0))
-	# Bob de cabeza.
-	var planar := Vector2(velocity.x, velocity.z).length()
-	if is_on_floor() and planar > 0.8:
-		_bob_t += delta * (6.0 + planar * 1.3)
-	var amp := 0.016 * clampf(planar / BASE_SPEED, 0.0, 1.0)
-	camera.position.y = sin(_bob_t) * amp
-	camera.position.x = cos(_bob_t * 0.5) * amp * 0.6
-	# Shake.
+	var frac := clampf(Engine.get_physics_interpolation_fraction(), 0.0, 1.0)
+	var interp_pos := _prev_body_pos.lerp(_curr_body_pos, frac)
+	var target_y := 1.02 if crouching else 1.62
+	var smooth := 1.0 - exp(-delta * 14.0)
+	_eye_y = lerpf(_eye_y, target_y, smooth)
+	_step_offset_y = lerpf(_step_offset_y, 0.0, 1.0 - exp(-delta * 18.0))
+	camera.position = Vector3.ZERO
+	var shake_off := Vector3.ZERO
 	if _shake > 0.001:
-		_shake = maxf(0.0, _shake - delta * 2.2)
-		camera_rig.rotation.z = randf_range(-1, 1) * _shake * 0.02
-		camera_rig.position.x += randf_range(-1, 1) * _shake * 0.01
+		_shake = maxf(0.0, _shake - delta * 2.4)
+		_roll = randf_range(-1.0, 1.0) * _shake * 0.018
+		shake_off = (
+			global_transform.basis.x
+			* (sin(recoil_yaw * 3.0) * 0.015 + randf_range(-1.0, 1.0) * _shake * 0.008)
+		)
 	else:
-		camera_rig.rotation.z = lerpf(camera_rig.rotation.z, 0.0, delta * 8.0)
+		_roll = lerpf(_roll, 0.0, 1.0 - exp(-delta * 10.0))
+		shake_off = global_transform.basis.x * (sin(recoil_yaw * 3.0) * 0.015)
+	camera_rig.global_position = interp_pos + Vector3(0.0, _eye_y + _step_offset_y, 0.0) + shake_off
 	_apply_camera_rotation()
-	# Zoom / ADS / FOV.
+	# Zoom real solo en armas con mira (AWP, Scout, G3SG1, SG550, AUG, SG552).
 	var def := current_def()
 	var zoom: float = float(def.get("zoom", 0.0))
-	if zoom_level > 0 and zoom > 0.0:
-		_target_fov = _base_fov / zoom
+	var is_sniper := String(def.get("cls", "")) == "sniper"
+	_scoped = zoom_level > 0 and zoom > 0.0
+	if _scoped:
+		if is_sniper:
+			var eff_zoom := 2.25 if zoom_level == 1 else maxf(zoom, 3.5)
+			_target_fov = _base_fov / eff_zoom
+		else:
+			_target_fov = _base_fov / zoom
 	else:
-		_target_fov = _base_fov * (0.86 if _ads else 1.0)
-	camera.fov = lerpf(camera.fov, _target_fov, clampf(delta * 12.0, 0.0, 1.0))
+		zoom_level = 0
+		_target_fov = _base_fov
+	camera.fov = lerpf(camera.fov, _target_fov, 1.0 - exp(-delta * 14.0))
 	if viewmodel:
-		viewmodel.set_ads(_scoped or _ads, _scoped and zoom > 0.0)
+		viewmodel.set_ads(_scoped and not is_sniper, _scoped and is_sniper)
 		var mouse_rel := _mouse_accum
 		_mouse_accum = Vector2.ZERO
 		viewmodel.update(delta, velocity, is_on_floor(), crouching, mouse_rel, want_walk)
@@ -339,8 +378,12 @@ func _update_camera(delta: float) -> void:
 
 func _update_camera_dead(delta: float) -> void:
 	if camera_rig:
-		camera_rig.position.y = lerpf(camera_rig.position.y, 0.35, clampf(delta * 3.0, 0.0, 1.0))
-		camera_rig.rotation.z = lerpf(camera_rig.rotation.z, 1.2, clampf(delta * 2.0, 0.0, 1.0))
+		var frac := clampf(Engine.get_physics_interpolation_fraction(), 0.0, 1.0)
+		var interp_pos := _prev_body_pos.lerp(_curr_body_pos, frac)
+		_eye_y = lerpf(_eye_y, 0.35, 1.0 - exp(-delta * 3.5))
+		_roll = lerpf(_roll, 1.15, 1.0 - exp(-delta * 2.2))
+		camera_rig.global_position = interp_pos + Vector3(0.0, _eye_y, 0.0)
+		_apply_camera_rotation()
 	if viewmodel:
 		viewmodel.visible = false
 
@@ -381,17 +424,32 @@ func on_respawn(pos: Vector3) -> void:
 	_dead_time = 0.0
 	_pitch = 0.0
 	_shake = 0.0
+	_roll = 0.0
+	_eye_y = 1.62
+	_step_offset_y = 0.0
 	_scoped = false
-	_ads = false
 	zoom_level = 0
+	_target_fov = _base_fov
+	_prev_body_pos = global_position
+	_curr_body_pos = global_position
+	_pos_initialized = true
 	if camera_rig:
-		camera_rig.position = Vector3(0, 1.62, 0)
-		camera_rig.rotation = Vector3.ZERO
+		camera_rig.global_position = global_position + Vector3(0, 1.62, 0)
+		_apply_camera_rotation()
+	if camera:
+		camera.fov = _base_fov
+		camera.position = Vector3.ZERO
 	if viewmodel:
 		viewmodel.visible = true
+		viewmodel.set_ads(false, false)
 	input_enabled = true
 	capture_mouse(true)
 	select_slot(Content.SLOT_PRIMARY if primary_id != "" else Content.SLOT_SECONDARY)
+
+
+func face_towards(point: Vector3) -> void:
+	super.face_towards(point)
+	_apply_camera_rotation()
 
 
 func capture_mouse(capture: bool) -> void:

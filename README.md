@@ -9,18 +9,19 @@ Recreación jugable y **completa** del clásico *Counter-Strike 1.5*, hecha desd
 ## 1. Qué incluye
 
 ### Armas (24 de fuego + cuchillo + granadas + C4 = 29 objetos)
-- **Pistolas:** Glock 18 (ráfaga de 3), USP .45 (silenciable), P228, Desert Eagle, Five-SeveN, Dual Berettas.
+- **Pistolas:** Glock 18 (doble modo con click derecho: semiautomática / ráfaga de 3), USP .45 (silenciable), P228, Desert Eagle, Five-SeveN, Dual Berettas.
 - **Subfusiles:** TMP (silenciado), MAC-10, MP5 Navy, UMP 45, P90.
 - **Escopetas:** M3 Super 90 (corredera), XM1014.
-- **Fusiles:** FAMAS (ráfaga), Galil, AK-47, M4A1 (silenciable), SG 552 (mira 2x), Steyr AUG (mira 1.8x).
-- **Francotiradores:** Scout, AWP, G3SG1, SG 550.
+- **Fusiles:** FAMAS (doble modo con click derecho: automática / ráfaga de 3), Galil, AK-47, M4A1 (silenciable), SG 552 (mira 2x), Steyr AUG (mira 1.8x).
+- **Francotiradores:** Scout, AWP, G3SG1, SG 550 (doble nivel de zoom con click derecho; las armas sin mira no hacen zoom).
 - **Ametralladora:** M249 Para.
-- **Extras:** cuchillo (apuñalamiento por la espalda), HE, flashbang, granada de humo y C4.
+- **Extras:** cuchillo (corte rápido con click izquierdo y apuñalamiento pesado con click derecho), HE, flashbang, granada de humo y C4.
 - Balística con dispersión por movimiento/aire/agachado, retroceso ascendente, penetración de paredes, daño por zona (cabeza ×4, piernas ×0.75), caída de daño por distancia, chaleco y casco, headshots, hitmarkers y killfeed.
 
 ### Modos de juego
 - **Bombeo (`de_`)**: compra, economía por rondas (victoria, bonus por racha de derrotas, recompensas por plantar/desactivar), plantado de C4 con cuenta atrás de 40 s, desactivación con/sin kit, explosión con daño en área.
 - **Rehenes (`cs_`)**: liberación, escolta y rescate de rehenes.
+- **Deathmatch (`de_` / `cs_`)**: combate continuo sin rondas con compra libre en cualquier momento (`[B]`), equipamiento persistente y **respawns dinámicos distribuidos por todo el mapa que cambian cada vez que mueres** con protección temporal de reaparición.
 - **Zombie (`zm_`)**: oleadas infinitas con 5 tipos de no-muertos (caminante, corredor, bruto, escupidor y jefe), puntos por daño/baja, caja misteriosa, máquinas de perks (Juggernog, Speed Cola, Double Tap, Quick Revive, Mule Kick), reabastecimiento de munición, aliados bot y progresión de dificultad.
 
 ### Mapas (10)
@@ -57,11 +58,11 @@ Todos los sonidos se sintetizan por DSP al arrancar: 16 familias de disparos con
 
 ## 1.1 Descargar el proyecto
 
-**Descarga directa del zip (última versión `v1.0.5`):**
+**Descarga directa del zip (última versión `v1.0.6`):**
 
-> ### ⬇️ https://github.com/ShadowNigth/Papita/archive/refs/tags/v1.0.5.zip
+> ### ⬇️ https://github.com/ShadowNigth/Papita/archive/refs/tags/v1.0.6.zip
 
-- Página de la release: https://github.com/ShadowNigth/Papita/releases/tag/v1.0.5
+- Página de la release: https://github.com/ShadowNigth/Papita/releases/tag/v1.0.6
 - Último estado de la rama de desarrollo (zip): https://github.com/ShadowNigth/Papita/archive/refs/heads/arena/9025a588-papita.zip
 
 El zip contiene el proyecto completo (código, shaders, fuentes, docs y herramientas). No incluye `.git` ni `.godot`.

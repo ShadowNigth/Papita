@@ -285,10 +285,14 @@ func _combat_movement(delta: float) -> void:
 		"defend", "attack", "roam":
 			_move_towards(objective)
 			if global_position.distance_to(objective) < 3.5:
-				should_stop = true
-				if _now() - fire_time > 2.0:
-					patrol_point = _random_near(objective, 6.0)
+				if state == "roam" and nav != null:
+					patrol_point = nav.random_point(_rng)
 					objective = patrol_point
+				else:
+					should_stop = true
+					if _now() - fire_time > 2.0:
+						patrol_point = _random_near(objective, 6.0)
+						objective = patrol_point
 			_scan_idle(delta)
 		_:
 			_move_towards(objective)
@@ -509,6 +513,8 @@ func _objective_state() -> String:
 			return "rescue"
 		"defend":
 			return "defend"
+		"roam":
+			return "roam"
 	return "attack"
 
 

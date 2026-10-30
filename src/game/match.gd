@@ -20,6 +20,10 @@ const FREEZE_TIME := 4.0
 const PLANT_TIME := 3.2
 const BUY_WINDOW := 15.0
 const MATCH_POINTS := 16
+const DM_DURATION := 600.0
+const DM_FRAG_LIMIT := 45
+const DM_RESPAWN_DELAY := 1.45
+const DM_SPAWN_SHIELD := 1.8
 
 var mode := "bomb"
 var map_id := "de_dust2"
@@ -75,6 +79,9 @@ var _rng := RandomNumberGenerator.new()
 var _start_money := 800
 var _loss_streak := {1: 0, 2: 0}
 var _last_spawn_index := 0
+var _dm_spawns: Array[Vector3] = []
+var _dm_recent_spawns: Dictionary = {}
+var _dm_player_loadout := {"primary": "", "secondary": ""}
 var _loading_layer: CanvasLayer
 var _loading_label: Label
 var _splashes := 0
@@ -146,6 +153,12 @@ func start_match(map: String, game_mode: String, team: int, bot_count: int, diff
 		AudioBank.set_music("zombie_music", 3.0)
 		_setup_zombie()
 		await get_tree().create_timer(0.4).timeout
+	elif mode == "deathmatch":
+		AudioBank.set_music("", 2.0)
+		_build_dm_spawns()
+		_spawn_bots(bot_count)
+		await get_tree().create_timer(0.35).timeout
+		_setup_deathmatch()
 	else:
 		AudioBank.set_music("", 2.0)
 		_spawn_bots(bot_count)
@@ -262,7 +275,7 @@ func _spawn_hostages() -> void:
 
 
 func start_round() -> void:
-	if match_over or mode == "zombie":
+	if match_over or mode == "zombie" or mode == "deathmatch":
 		return
 	round_state = "freeze"
 	freeze_time_left = FREEZE_TIME
@@ -460,6 +473,9 @@ func _process(delta: float) -> void:
 	if mode == "zombie":
 		_process_zombie_mode(delta)
 		return
+	if mode == "deathmatch":
+		_process_deathmatch(delta)
+		return
 	_update_hostages()
 	match round_state:
 		"freeze":
@@ -627,6 +643,13 @@ func _on_combatant_died(
 			var def := Content.get_weapon(weapon_id)
 			var award: int = int(def.get("award", 300)) if not def.is_empty() else 300
 			killer.money = mini(Content.MAX_MONEY, killer.money + award)
+			if mode == "deathmatch":
+				killer.money = Content.MAX_MONEY
+				if killer.team == Content.TEAM_CT:
+					score_ct += 1
+				elif killer.team == Content.TEAM_T:
+					score_t += 1
+				score_changed.emit()
 			if killer.is_player:
 				AudioBank.play_2d("money", -12.0)
 				Settings.add_progress("kills")
@@ -637,6 +660,11 @@ func _on_combatant_died(
 		killer_name = "C4"
 	kill_event.emit(killer_name, victim.display_name, weapon_id, headshot, killer_team)
 	if victim == player:
+		if mode == "deathmatch":
+			if player.primary_id != "":
+				_dm_player_loadout["primary"] = player.primary_id
+			if player.secondary_id != "":
+				_dm_player_loadout["secondary"] = player.secondary_id
 		player_died.emit()
 		player.input_enabled = false
 		capture_mouse(false)
@@ -644,6 +672,12 @@ func _on_combatant_died(
 			_handle_player_death_zombie()
 		if ingame_ui and ingame_ui.has_method("show_death"):
 			ingame_ui.call("show_death", killer_name)
+	if mode == "deathmatch":
+		if score_ct >= DM_FRAG_LIMIT or score_t >= DM_FRAG_LIMIT:
+			_finish_deathmatch()
+		elif not match_over:
+			_schedule_dm_respawn(victim)
+		return
 	if victim.is_zombie:
 		total_zombies_killed += 1
 		wave_kills += 1
@@ -1118,11 +1152,14 @@ func _open_buy_menu() -> void:
 		return
 	if player == null or not player.alive:
 		return
-	var elapsed := float(Settings.data.gameplay.get("round_time", 300)) - round_time_left
-	var buy_window := float(Settings.data.gameplay.get("buy_time", 45))
-	if elapsed > buy_window and round_state == "live":
-		message.emit("EL TIEMPO DE COMPRA TERMINO", Color(1, 0.5, 0.3), 2.0)
-		return
+	if mode != "deathmatch":
+		var elapsed := float(Settings.data.gameplay.get("round_time", 300)) - round_time_left
+		var buy_window := float(Settings.data.gameplay.get("buy_time", 45))
+		if elapsed > buy_window and round_state == "live":
+			message.emit("EL TIEMPO DE COMPRA TERMINO", Color(1, 0.5, 0.3), 2.0)
+			return
+	else:
+		player.money = Content.MAX_MONEY
 	if ingame_ui:
 		ingame_ui.call("open_buy_menu")
 
@@ -1168,12 +1205,19 @@ func buy_item(id: String) -> bool:
 				return false
 			player.give_weapon(id, true)
 			player.primary_id = id
+			if mode == "deathmatch":
+				_dm_player_loadout["primary"] = id
 		elif slot == Content.SLOT_SECONDARY:
 			if player.secondary_id == id:
 				return false
 			player.give_weapon(id, true)
+			if mode == "deathmatch":
+				_dm_player_loadout["secondary"] = id
 		AudioBank.play_2d("buy", -4.0)
-	player.money = maxi(0, player.money - price)
+	if mode == "deathmatch":
+		player.money = Content.MAX_MONEY
+	else:
+		player.money = maxi(0, player.money - price)
 	if hud:
 		hud.call("on_buy", id)
 	return true
@@ -1185,6 +1229,302 @@ func _count_grenade(c: Combatant, id: String) -> int:
 		if g == id:
 			n += 1
 	return n
+
+
+# --- Deathmatch ----------------------------------------------------------------
+
+
+func _build_dm_spawns() -> void:
+	_dm_spawns.clear()
+	_dm_recent_spawns.clear()
+	var raw_candidates: Array[Vector3] = []
+	for p: Vector3 in layout.get("spawns_ct", []):
+		raw_candidates.append(p)
+	for p: Vector3 in layout.get("spawns_t", []):
+		raw_candidates.append(p)
+	for site: Dictionary in layout.get("sites", []):
+		var sc: Vector3 = site.get("center", Vector3.ZERO)
+		raw_candidates.append(sc)
+		for off: Vector3 in [
+			Vector3(3.6, 0, 0),
+			Vector3(-3.6, 0, 0),
+			Vector3(0, 0, 3.6),
+			Vector3(0, 0, -3.6),
+		]:
+			raw_candidates.append(sc + off)
+	for hp: Vector3 in layout.get("hostages", []):
+		raw_candidates.append(hp)
+	if layout.has("rescue"):
+		raw_candidates.append(layout.get("rescue", Vector3.ZERO))
+	if nav != null and nav.ready and nav.cols > 6 and nav.rows > 6:
+		var step_x := maxi(3, nav.cols / 9)
+		var step_z := maxi(3, nav.rows / 9)
+		for cz in range(2, nav.rows - 2, step_z):
+			for cx in range(2, nav.cols - 2, step_x):
+				var cell := Vector2i(cx, cz)
+				if not _is_open_nav_cell(cell):
+					continue
+				raw_candidates.append(nav.world_from_cell(cell))
+	var space := get_world_3d().direct_space_state
+	var shape := CapsuleShape3D.new()
+	shape.radius = 0.4
+	shape.height = 1.75
+	var sq := PhysicsShapeQueryParameters3D.new()
+	sq.shape = shape
+	sq.collision_mask = 1
+	for min_sep: float in [5.4, 3.6]:
+		for cand in raw_candidates:
+			if _dm_spawns.size() >= 36:
+				break
+			var snapped := cand
+			if nav != null and nav.ready:
+				var c := nav.nearest_walkable(nav.cell_from_world(cand), 4)
+				if not nav.is_walkable(c):
+					continue
+				snapped = nav.world_from_cell(c)
+			sq.transform = Transform3D(Basis.IDENTITY, snapped + Vector3(0.0, 1.02, 0.0))
+			if not space.intersect_shape(sq, 1).is_empty():
+				continue
+			var too_close := false
+			for existing in _dm_spawns:
+				if existing.distance_to(snapped) < min_sep:
+					too_close = true
+					break
+			if not too_close:
+				_dm_spawns.append(snapped)
+		if _dm_spawns.size() >= 18:
+			break
+	if _dm_spawns.is_empty():
+		_dm_spawns.append(map_builder.get_spawn(Content.TEAM_CT, 0))
+		_dm_spawns.append(map_builder.get_spawn(Content.TEAM_T, 0))
+
+
+func _is_open_nav_cell(c: Vector2i) -> bool:
+	if nav == null or not nav.is_walkable(c):
+		return false
+	var h0 := nav.heights[nav.cell_index(c.x, c.y)]
+	for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var n := c + d
+		if not nav.is_walkable(n):
+			return false
+		if absf(nav.heights[nav.cell_index(n.x, n.y)] - h0) > 0.45:
+			return false
+	return true
+
+
+func _pick_dm_spawn(who: Combatant) -> Vector3:
+	if _dm_spawns.is_empty():
+		_build_dm_spawns()
+	var key := String(who.name)
+	var recent: Array = _dm_recent_spawns.get(key, [])
+	var max_history := mini(5, maxi(1, _dm_spawns.size() - 2))
+	var space := get_world_3d().direct_space_state
+	var best_idx := 0
+	var best_score := -999999.0
+	for i in _dm_spawns.size():
+		if recent.has(i) and _dm_spawns.size() > recent.size():
+			continue
+		var sp := _dm_spawns[i]
+		var min_any := 999.0
+		var min_enemy := 999.0
+		var exposed := false
+		for other in all_combatants:
+			if other == null or other == who or not is_instance_valid(other) or not other.alive:
+				continue
+			if other.is_hostage:
+				continue
+			var d := sp.distance_to(other.global_position)
+			min_any = minf(min_any, d)
+			if other.team != who.team:
+				min_enemy = minf(min_enemy, d)
+				if not exposed and d < 38.0:
+					var rq := PhysicsRayQueryParameters3D.new()
+					rq.from = sp + Vector3(0.0, 1.5, 0.0)
+					rq.to = other.global_position + Vector3(0.0, 1.45, 0.0)
+					rq.collision_mask = 1
+					if space.intersect_ray(rq).is_empty():
+						exposed = true
+		var score := _rng.randf_range(0.0, 9.5)
+		if min_any < 3.4:
+			score -= 220.0
+		if min_enemy < 990.0:
+			if min_enemy < 7.5:
+				score -= 95.0
+			else:
+				score += clampf(min_enemy, 8.0, 34.0)
+		if exposed:
+			score -= 48.0
+		if score > best_score:
+			best_score = score
+			best_idx = i
+	recent.append(best_idx)
+	while recent.size() > max_history:
+		recent.pop_front()
+	_dm_recent_spawns[key] = recent
+	return _dm_spawns[best_idx]
+
+
+func _orient_dm_spawn(who: Combatant, pos: Vector3) -> void:
+	var best_dir := -pos.normalized()
+	best_dir.y = 0.0
+	if best_dir.length_squared() < 0.01:
+		best_dir = Vector3.FORWARD
+	else:
+		best_dir = best_dir.normalized()
+	var space := get_world_3d().direct_space_state
+	var best_clear := -1.0
+	for k in 8:
+		var ang := float(k) * (TAU / 8.0)
+		var dir := Vector3(sin(ang), 0.0, cos(ang))
+		var rq := PhysicsRayQueryParameters3D.new()
+		rq.from = pos + Vector3(0.0, 1.35, 0.0)
+		rq.to = rq.from + dir * 9.0
+		rq.collision_mask = 1
+		var hit := space.intersect_ray(rq)
+		var clear_dist := 9.0 if hit.is_empty() else rq.from.distance_to(hit.position)
+		clear_dist += maxf(0.0, dir.dot(best_dir)) * 1.5
+		if clear_dist > best_clear:
+			best_clear = clear_dist
+			best_dir = dir
+	who.face_towards(pos + best_dir * 4.0)
+
+
+func _setup_deathmatch() -> void:
+	round_state = "live"
+	round_number = 1
+	round_time_left = DM_DURATION
+	score_ct = 0
+	score_t = 0
+	_dm_player_loadout = {
+		"primary": "m4a1" if player_team == Content.TEAM_CT else "ak47",
+		"secondary": "usp45" if player_team == Content.TEAM_CT else "glock18",
+	}
+	for c in all_combatants:
+		if c == null or not is_instance_valid(c) or c.is_hostage:
+			continue
+		_respawn_combatant_dm(c, false)
+	AudioBank.play_2d("round_start", -1.5)
+	message.emit(
+		"DEATHMATCH - PULSA [B] PARA CAMBIAR DE ARMA EN CUALQUIER MOMENTO",
+		Color(0.95, 0.82, 0.42),
+		4.2
+	)
+	state_changed.emit(round_state)
+
+
+func _process_deathmatch(delta: float) -> void:
+	if match_over or round_state != "live":
+		return
+	round_time_left -= delta
+	if round_time_left <= 0.0:
+		round_time_left = 0.0
+		_finish_deathmatch()
+		return
+	_update_interaction()
+
+
+func _schedule_dm_respawn(victim: Combatant) -> void:
+	if victim == null or not is_instance_valid(victim):
+		return
+	var delay := DM_RESPAWN_DELAY if victim.is_player else _rng.randf_range(1.4, 2.1)
+	var timer := get_tree().create_timer(delay)
+	timer.timeout.connect(
+		func() -> void:
+			if not is_inside_tree() or match_over or not is_instance_valid(victim):
+				return
+			if not victim.alive:
+				_respawn_combatant_dm(victim, true)
+	)
+
+
+func _respawn_combatant_dm(c: Combatant, grant_shield: bool = true) -> void:
+	var spawn := _pick_dm_spawn(c)
+	c.round_kills = 0
+	c.frozen = false
+	c.money = Content.MAX_MONEY
+	if c.is_player:
+		var p := c as Player
+		if ingame_ui and ingame_ui.has_method("hide_death"):
+			ingame_ui.call("hide_death")
+		p.primary_id = ""
+		p.secondary_id = ""
+		p.grenades.clear()
+		p.on_respawn(spawn)
+		_orient_dm_spawn(p, spawn)
+		p.equip_armor(true)
+		var sec_id := String(_dm_player_loadout.get("secondary", ""))
+		if sec_id == "":
+			sec_id = "usp45" if p.team == Content.TEAM_CT else "glock18"
+		p.give_weapon(sec_id, false)
+		var pri_id := String(_dm_player_loadout.get("primary", ""))
+		if pri_id != "":
+			p.give_weapon(pri_id, true)
+			p.primary_id = pri_id
+		_restock_ammo(p)
+		p.select_slot(Content.SLOT_PRIMARY if p.primary_id != "" else Content.SLOT_SECONDARY)
+		p.input_enabled = true
+		if not (ingame_ui and bool(ingame_ui.get("paused"))):
+			capture_mouse(true)
+	else:
+		c.primary_id = ""
+		c.secondary_id = ""
+		c.grenades.clear()
+		c.respawn(spawn)
+		_orient_dm_spawn(c, spawn)
+		if c is Bot:
+			_bot_equip_dm(c as Bot)
+	if grant_shield:
+		c.invulnerable = true
+		c.set_meta("dm_spawn_shield", true)
+		var shield_timer := get_tree().create_timer(DM_SPAWN_SHIELD)
+		shield_timer.timeout.connect(
+			func() -> void:
+				if is_instance_valid(c):
+					c.invulnerable = false
+					c.set_meta("dm_spawn_shield", false)
+		)
+
+
+func _bot_equip_dm(bot: Bot) -> void:
+	var dm_pool_ct := ["m4a1", "famas", "aug", "mp5", "p90", "scout", "awp", "xm1014"]
+	var dm_pool_t := ["ak47", "galil", "sg552", "mp5", "p90", "scout", "awp", "m3"]
+	var pool := dm_pool_ct if bot.team == Content.TEAM_CT else dm_pool_t
+	var pri: String = String(pool[_rng.randi_range(0, pool.size() - 1)])
+	var sec := (
+		"deagle" if _rng.randf() < 0.35 else ("usp45" if bot.team == Content.TEAM_CT else "glock18")
+	)
+	bot.equip_armor(true)
+	bot.give_weapon(sec, false)
+	bot.give_weapon(pri, true)
+	bot.primary_id = pri
+	if _rng.randf() < 0.25:
+		bot.give_weapon("hegrenade", false)
+	_restock_ammo(bot)
+	bot.select_slot(Content.SLOT_PRIMARY)
+	bot.objective_type = "roam"
+	if nav != null and nav.ready:
+		bot.patrol_point = nav.random_point(_rng)
+		bot.objective = bot.patrol_point
+
+
+func _finish_deathmatch() -> void:
+	if match_over:
+		return
+	match_over = true
+	round_state = "match_end"
+	var winner := Content.TEAM_CT if score_ct >= score_t else Content.TEAM_T
+	var won := winner == player_team and score_ct != score_t
+	AudioBank.play_win_voice(winner)
+	for c in all_combatants:
+		if is_instance_valid(c):
+			c.frozen = true
+	if player:
+		player.input_enabled = false
+	if won:
+		Settings.add_progress("wins")
+	Settings.add_progress("matches")
+	if ingame_ui and ingame_ui.has_method("show_match_end"):
+		ingame_ui.call("show_match_end", won, score_ct, score_t)
 
 
 # --- Zombie --------------------------------------------------------------------

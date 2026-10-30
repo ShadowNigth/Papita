@@ -422,8 +422,8 @@ func _build_modes() -> void:
 	screen.add_child(shade)
 	var center := VBoxContainer.new()
 	center.set_anchors_preset(Control.PRESET_CENTER)
-	center.position = Vector2(-520, -260)
-	center.custom_minimum_size = Vector2(1040, 520)
+	center.position = Vector2(-680, -260)
+	center.custom_minimum_size = Vector2(1360, 520)
 	center.add_theme_constant_override("separation", 14)
 	screen.add_child(center)
 	var title := UITheme.title("SELECCIONA UN MODO DE JUEGO", 32)
@@ -440,7 +440,7 @@ func _build_modes() -> void:
 			"sub": "C4 / OBJETIVOS",
 			"desc":
 			"Terroristas plantan el C4, CT lo desactiva.\nEconomia completa, rondas y compra de armas.",
-			"maps": "4 mapas",
+			"maps": "6 mapas",
 			"color": UITheme.ORANGE,
 		},
 		{
@@ -450,6 +450,15 @@ func _build_modes() -> void:
 			"desc": "Los CT deben liberar y escoltar a los rehenes\nhasta la zona de rescate.",
 			"maps": "2 mapas",
 			"color": UITheme.CT,
+		},
+		{
+			"id": "deathmatch",
+			"title": "DEATHMATCH",
+			"sub": "RESPAWNS DINAMICOS",
+			"desc":
+			"Accion continua sin rondas: cada vez que\nmueres reapareces en otro punto del mapa.",
+			"maps": "8 mapas",
+			"color": Color(0.95, 0.42, 0.32),
 		},
 		{
 			"id": "zombie",
@@ -463,7 +472,7 @@ func _build_modes() -> void:
 	_mode_buttons.clear()
 	for m in modes:
 		var card := Button.new()
-		card.custom_minimum_size = Vector2(320, 330)
+		card.custom_minimum_size = Vector2(316, 330)
 		card.add_theme_stylebox_override(
 			"normal", _mode_style(Color(0.05, 0.06, 0.05, 0.94), Color(0.3, 0.28, 0.17))
 		)
@@ -542,6 +551,16 @@ func _build_maps() -> void:
 	vb.add_child(head)
 	var map_note := "Los mapas se reconstruyen proceduralmente con su ambiente, props y navegacion de bots."
 	vb.add_child(UITheme.label(map_note, 12, UITheme.TEXT_DIM))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.custom_minimum_size = Vector2(1440, 560)
+	vb.add_child(scroll)
+	var grid := GridContainer.new()
+	grid.name = "MapGrid"
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 16)
+	grid.add_theme_constant_override("v_separation", 16)
+	scroll.add_child(grid)
 	var footer := HBoxContainer.new()
 	footer.add_theme_constant_override("separation", 12)
 	footer.alignment = BoxContainer.ALIGNMENT_END

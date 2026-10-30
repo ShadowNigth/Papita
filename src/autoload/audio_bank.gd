@@ -14,6 +14,7 @@ const SOUND_POOLS := {
 	"kevlar": ["items/kevlar.wav"],
 	"flashlight": ["items/flashlight1.wav"],
 	"zoom": ["weapons/zoom.wav"],
+	"fire_mode": ["weapons/clipin1.wav"],
 	"weapon_drop": ["items/weapondrop1.wav"],
 	"reload_out": ["weapons/clipout1.wav"],
 	"reload_in": ["weapons/clipin1.wav"],
@@ -190,7 +191,7 @@ const C4_BEEPS: Array[String] = [
 
 ## Disparos individuales originales por arma de Counter-Strike 1.5.
 const WEAPON_FIRE_WAVS := {
-	"glock18": ["weapons/glock18-1.wav", "weapons/glock18-2.wav"],
+	"glock18": ["weapons/glock18-2.wav"],
 	"usp45": ["weapons/usp_unsil-1.wav"],
 	"usp45_sil": ["weapons/usp1.wav", "weapons/usp2.wav"],
 	"p228": ["weapons/p228-1.wav"],
