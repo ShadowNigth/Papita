@@ -845,7 +845,7 @@ func _drop_weapon() -> void:
 		return
 	var game := get_tree().get_first_node_in_group("game")
 	if game and game.has_method("spawn_pickup"):
-		var a := ammo.get(primary_id, Vector2i(0, 0))
+		var a: Vector2i = ammo.get(primary_id, Vector2i(0, 0))
 		game.spawn_pickup(primary_id, global_position + Vector3(0, 0.3, 0), primary_id, a.x, a.y)
 
 

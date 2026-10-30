@@ -1232,8 +1232,8 @@ func _process_zombie_mode(delta: float) -> void:
 			if intermission_time <= 0.0:
 				_start_wave()
 	if player and player.alive:
-		var blocked_ui := ingame_ui != null and ingame_ui.get("buy_open")
-		var paused_ui := ingame_ui != null and ingame_ui.get("paused")
+		var blocked_ui: bool = ingame_ui != null and bool(ingame_ui.get("buy_open"))
+		var paused_ui: bool = ingame_ui != null and bool(ingame_ui.get("paused"))
 		if not blocked_ui and not paused_ui:
 			player.input_enabled = true
 	# Los aliados bot siguen al jugador cuando andan lejos.

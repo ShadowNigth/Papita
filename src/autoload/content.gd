@@ -1389,7 +1389,7 @@ func difficulty(index: int) -> Dictionary:
 
 
 func rank_for_kills(kills: int) -> String:
-	var rank := RANKS[0][1]
+	var rank := String(RANKS[0][1])
 	for entry in RANKS:
 		if kills >= int(entry[0]):
 			rank = entry[1]
