@@ -57,10 +57,14 @@ Todos los sonidos se sintetizan por DSP al arrancar: 16 familias de disparos con
 
 ## 1.1 Descargar el proyecto
 
-Cada actualización se publica como *release* con el zip listo para abrir en Godot:
+**Descarga directa del zip (última versión):**
 
-- **Última versión (zip):** https://github.com/ShadowNigth/Papita/releases/latest
-- **Rama de desarrollo (zip):** https://github.com/ShadowNigth/Papita/archive/refs/heads/arena/9025a588-papita.zip
+> ### ⬇️ https://github.com/ShadowNigth/Papita/archive/refs/tags/v1.0.1.zip
+
+- Página de la release: https://github.com/ShadowNigth/Papita/releases/tag/v1.0.1
+- Último estado de la rama de desarrollo (zip): https://github.com/ShadowNigth/Papita/archive/refs/heads/arena/9025a588-papita.zip
+
+El zip contiene el proyecto completo (código, shaders, fuentes, docs y herramientas). No incluye `.git` ni `.godot`.
 
 Para generar el zip tú mismo:
 
@@ -68,7 +72,9 @@ Para generar el zip tú mismo:
 tools/package.sh            # deja el archivo en /home/user/releases/
 ```
 
-El zip contiene el proyecto completo (código, shaders, fuentes, docs y herramientas); no incluye `.git`, `.godot` ni el propio zip.
+**Ritual de actualización:** cada vez que se sube un cambio se etiqueta la versión (`git tag vX.Y.Z`), se publica
+la release (`gh release create vX.Y.Z --verify-tag`) y se entrega el enlace
+`https://github.com/ShadowNigth/Papita/archive/refs/tags/vX.Y.Z.zip`.
 
 ---
 
