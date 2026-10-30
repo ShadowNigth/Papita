@@ -83,6 +83,9 @@ var _shadow_lights := 0
 var _root_geo: Node3D
 var _root_props: Node3D
 var _root_fx: Node3D
+var _doors: Array[Dictionary] = []
+var _sky_rid := RID()
+var _door_scan_t := 0.0
 
 
 func setup(layout: Dictionary) -> void:
@@ -98,12 +101,57 @@ func setup(layout: Dictionary) -> void:
 	_root_fx.name = "Fx"
 	add_child(_root_fx)
 	_build_environment()
-	_build_ground()
-	_build_blocks()
+	var bsp_name := String(data.get("bsp", ""))
+	if bsp_name != "":
+		var built := BspLoader.build_into(
+			bsp_name, data.get("bsp_offset", Vector3.ZERO), _theme(), _root_geo, _root_props
+		)
+		var built_doors: Array = built.get("doors", [])
+		_doors.clear()
+		for d in built_doors:
+			_doors.append(d)
+		_sky_rid = built.get("sky_rid", RID())
+	else:
+		_build_ground()
+		_build_blocks()
+		_build_water()
 	_build_props()
-	_build_water()
 	_build_objective_markers()
 	_build_particles()
+
+
+func _process(delta: float) -> void:
+	if _doors.is_empty():
+		return
+	_door_scan_t -= delta
+	var check_prox := _door_scan_t <= 0.0
+	var actors: Array[Node] = []
+	if check_prox:
+		_door_scan_t = 0.14
+		actors = get_tree().get_nodes_in_group("combatant")
+	for d in _doors:
+		var node: StaticBody3D = d["node"]
+		if node == null or not is_instance_valid(node):
+			continue
+		if check_prox:
+			var cpos: Vector3 = d["center"]
+			var near := false
+			for a in actors:
+				if a is Combatant and (a as Combatant).alive:
+					if (a as Combatant).global_position.distance_to(cpos) < 2.85:
+						near = true
+						break
+			if near:
+				if not bool(d["was_open"]):
+					AudioBank.play_at("door_move", self, cpos, -7.0, 1.0, 22.0)
+				d["open_t"] = 2.6
+				d["was_open"] = true
+			elif float(d["open_t"]) <= 0.0:
+				d["was_open"] = false
+		var open_t := maxf(0.0, float(d["open_t"]) - delta)
+		d["open_t"] = open_t
+		var goal: Vector3 = d["open_pos"] if open_t > 0.0 else d["closed_pos"]
+		node.position = node.position.lerp(goal, clampf(delta * 5.5, 0.0, 1.0))
 
 
 func _theme() -> String:
@@ -634,45 +682,73 @@ func _spawn_particles(kind: String, color: Color, amount: int) -> void:
 func bake_navigation() -> NavGraph:
 	await get_tree().physics_frame
 	await get_tree().physics_frame
-	var bounds: Rect2 = data.bounds.grow(-2.5)
+	var is_bsp := String(data.get("bsp", "")) != ""
+	var bounds: Rect2 = data.bounds.grow(-1.6 if is_bsp else -2.5)
+	var span := maxf(bounds.size.x, bounds.size.y)
+	var cell_sz := clampf(span / 92.0, 0.9, 1.45) if is_bsp else 0.8
 	nav = NavGraph.new()
-	nav.setup(bounds, 0.8)
+	nav.setup(bounds, cell_sz)
+
+	# Desactiva puertas temporalmente para que la navegacion conecte habitaciones.
+	for d in _doors:
+		var dn: StaticBody3D = d["node"]
+		if dn and is_instance_valid(dn):
+			dn.collision_layer = 0
+
 	var space := get_world_3d().direct_space_state
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(0.62, 1.7, 0.62)
+	shape.size = Vector3(0.56, 1.58, 0.56)
 	var params := PhysicsShapeQueryParameters3D.new()
 	params.shape = shape
 	params.collision_mask = 1
 	params.collide_with_bodies = true
+	var excludes: Array[RID] = []
+	if _sky_rid.is_valid():
+		excludes.append(_sky_rid)
+	params.exclude = excludes
+
 	var ray := PhysicsRayQueryParameters3D.new()
 	ray.collision_mask = 1
 	ray.collide_with_bodies = true
-	var blocker := BoxShape3D.new()
-	var origin_y := 9.0
+	ray.exclude = excludes
+
+	var y_top := float(data.get("nav_y_max", 9.0)) if is_bsp else 9.0
+	var y_bot := float(data.get("nav_y_min", -3.0)) if is_bsp else -3.0
+	var play_max := float(data.get("playable_y_max", 3.2)) if is_bsp else 3.2
+	var play_min := float(data.get("playable_y_min", -2.5)) if is_bsp else -2.5
+
 	for cz in nav.rows:
 		for cx in nav.cols:
 			var wx := bounds.position.x + (cx + 0.5) * nav.cell
 			var wz := bounds.position.y + (cz + 0.5) * nav.cell
-			ray.from = Vector3(wx, origin_y, wz)
-			ray.to = Vector3(wx, -3.0, wz)
-			var hit := space.intersect_ray(ray)
-			var tries := 0
-			# Ignora techos altos: busca el piso real debajo de ellos.
-			while not hit.is_empty() and hit.position.y > 2.9 and tries < 3:
-				tries += 1
-				ray.from = Vector3(wx, hit.position.y - 0.12, wz)
-				hit = space.intersect_ray(ray)
-			var h := 0.0
+			var cur_y := y_top
+			var found_h := 0.0
 			var blocked := true
-			if not hit.is_empty():
-				h = hit.position.y
-				params.transform = Transform3D(Basis(), Vector3(wx, h + 0.9, wz))
-				var overlaps := space.intersect_shape(params, 1)
-				blocked = not overlaps.is_empty()
-				# Evita celdas sobre techos o superficies inalcanzables.
-				if h > 3.2:
-					blocked = true
-			nav.set_cell(cx, cz, h, blocked)
+			var tries := 0
+			while tries < 6 and cur_y > y_bot + 0.5:
+				tries += 1
+				ray.from = Vector3(wx, cur_y, wz)
+				ray.to = Vector3(wx, y_bot, wz)
+				var hit := space.intersect_ray(ray)
+				if hit.is_empty():
+					break
+				var hy: float = hit.position.y
+				var hn: Vector3 = hit.normal
+				if hy <= play_max and hy >= play_min and hn.y >= 0.62:
+					params.transform = Transform3D(Basis(), Vector3(wx, hy + 0.92, wz))
+					var overlaps := space.intersect_shape(params, 1)
+					if overlaps.is_empty():
+						found_h = hy
+						blocked = false
+						break
+				cur_y = hy - 0.32
+			nav.set_cell(cx, cz, found_h, blocked)
+
+	for d in _doors:
+		var dn2: StaticBody3D = d["node"]
+		if dn2 and is_instance_valid(dn2):
+			dn2.collision_layer = 1
+
 	nav.finish()
 	print("[MapBuilder] navegacion horneada: %dx%d celdas" % [nav.cols, nav.rows])
 	return nav

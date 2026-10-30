@@ -336,7 +336,7 @@ func _update_camera(delta: float) -> void:
 		return
 	var frac := clampf(Engine.get_physics_interpolation_fraction(), 0.0, 1.0)
 	var interp_pos := _prev_body_pos.lerp(_curr_body_pos, frac)
-	var target_y := 1.02 if crouching else 1.62
+	var target_y := 0.76 if crouching else 1.62
 	var smooth := 1.0 - exp(-delta * 14.0)
 	_eye_y = lerpf(_eye_y, target_y, smooth)
 	_step_offset_y = lerpf(_step_offset_y, 0.0, 1.0 - exp(-delta * 18.0))
@@ -401,13 +401,15 @@ func _drop_current() -> void:
 		secondary_id = ""
 	var game := get_tree().get_first_node_in_group("game")
 	if game and game.has_method("spawn_pickup"):
+		var throw_vel := get_fire_direction() * 6.6 + velocity * 0.45 + Vector3(0.0, 2.1, 0.0)
 		game.call(
 			"spawn_pickup",
 			id,
-			global_position + get_fire_direction() * 1.2 + Vector3(0, 0.3, 0),
+			global_position + get_fire_direction() * 0.65 + Vector3(0, 1.05, 0),
 			id,
 			a.x,
-			a.y
+			a.y,
+			throw_vel
 		)
 	AudioBank.play_2d("weapon_drop", -5.0)
 	current_id = ""

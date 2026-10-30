@@ -83,6 +83,7 @@ const WEAPON_AIM_GROUP := {
 	"hegrenade": "grenade",
 	"flashbang": "grenade",
 	"smokegrenade": "grenade",
+	"molotov": "grenade",
 	"c4": "c4",
 }
 
@@ -131,6 +132,8 @@ static func world_weapon_path(weapon_id: String) -> String:
 
 
 static func held_weapon_path(weapon_id: String) -> String:
+	if weapon_id == "molotov":
+		return BASE_DIR + "p_hegrenade.mdl"
 	var direct := BASE_DIR + "p_" + weapon_id + ".mdl"
 	if FileAccess.file_exists(direct):
 		return direct

@@ -23,10 +23,12 @@ uniform vec3 moss_color : source_color = vec3(0.27, 0.33, 0.18);
 
 varying vec3 world_pos;
 varying vec3 world_normal;
+varying vec3 v_color;
 
 void vertex() {
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	v_color = COLOR.rgb;
 }
 
 void fragment() {
@@ -36,26 +38,31 @@ void fragment() {
 		: ((an.x >= an.z) ? world_pos.zy : world_pos.xy);
 	uv *= detail_scale * uv_scale;
 
-	vec3 albedo = texture(albedo_tex, uv).rgb * tint;
+	vec3 base_sample = texture(albedo_tex, uv).rgb;
+	vec3 micro_sample = texture(albedo_tex, uv * 3.7 + vec2(0.17, 0.31)).rgb;
+	float micro = clamp(dot(micro_sample, vec3(0.333)) * 0.36 + 0.82, 0.72, 1.18);
+	vec3 albedo = base_sample * micro * tint * v_color;
 	vec3 nrm_tex = texture(normal_tex, uv).rgb;
+	vec3 nrm_micro = texture(normal_tex, uv * 3.3).rgb;
+	nrm_tex = normalize(mix(nrm_tex * 2.0 - 1.0, nrm_micro * 2.0 - 1.0, 0.24)) * 0.5 + 0.5;
 	vec3 orm = texture(orm_tex, uv).rgb;
 
 	// Desgaste por altura (polvo) y humedad cerca del suelo.
-	float height_factor = clamp(world_pos.y * 0.18, 0.0, 1.0);
-	albedo = mix(albedo, vec3(0.75, 0.70, 0.58), wear * 0.16 * (0.4 + height_factor * 0.6) * (1.0 - orm.b));
+	float height_factor = clamp(world_pos.y * 0.14, 0.0, 1.0);
+	albedo = mix(albedo, albedo * vec3(1.06, 1.02, 0.94), wear * 0.18 * (0.4 + height_factor * 0.6) * (1.0 - orm.b));
 
-	float damp = wetness * (1.0 - smoothstep(0.0, 1.8, world_pos.y));
-	albedo *= mix(1.0, 0.58, damp);
+	float damp = wetness * (1.0 - smoothstep(0.0, 1.6, world_pos.y));
+	albedo *= mix(1.0, 0.64, damp);
 
 	// Musgo en caras superiores.
 	float up = smoothstep(0.62, 0.95, world_normal.y);
-	albedo = mix(albedo, moss_color, moss * up * 0.52);
+	albedo = mix(albedo, moss_color, moss * up * 0.48);
 
 	ALBEDO = albedo;
-	ROUGHNESS = clamp(mix(orm.g * roughness_scale, 0.18, damp), 0.05, 1.0);
+	ROUGHNESS = clamp(mix(orm.g * roughness_scale, 0.16, damp), 0.05, 1.0);
 	METALLIC = clamp(orm.b * metallic_scale, 0.0, 1.0);
-	AO = mix(1.0, orm.r, 0.6);
-	AO_LIGHT_AFFECT = 0.22;
+	AO = mix(1.0, orm.r, 0.72);
+	AO_LIGHT_AFFECT = 0.32;
 	NORMAL_MAP = nrm_tex;
 	NORMAL_MAP_DEPTH = normal_strength;
 	RIM = rim_power;

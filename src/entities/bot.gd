@@ -368,6 +368,14 @@ func _move_towards(point: Vector3) -> void:
 			away.y = 0
 			if away.length() < 1.3 and away.length() > 0.01:
 				dir += away.normalized() * 0.8
+		# Evita pisar fuego de Molotov activo estilo CS2.
+		for mf in get_tree().get_nodes_in_group("molotov_fire"):
+			if mf is Node3D and is_instance_valid(mf):
+				var faway := global_position - (mf as Node3D).global_position
+				faway.y = 0.0
+				var fd := faway.length()
+				if fd < 4.4 and fd > 0.01:
+					dir += faway.normalized() * 1.85
 	dir = dir.normalized()
 	wish_dir = Vector2(dir.x, dir.z)
 	# Salto si el siguiente waypoint esta mas alto.
@@ -410,6 +418,18 @@ func _engage(delta: float) -> void:
 	var def := current_def()
 	var dist := global_position.distance_to(aim_point)
 	var can_shoot := reaction_left <= 0.0 and target_visible
+	if (
+		not is_zombie
+		and not grenades.is_empty()
+		and dist > 9.0
+		and dist < 24.0
+		and _rng.randf() < delta * 0.24
+	):
+		select_slot(Content.SLOT_GRENADE)
+		wants_fire = true
+		return
+	if current_slot == Content.SLOT_GRENADE and grenades.is_empty():
+		select_slot(Content.SLOT_PRIMARY if primary_id != "" else Content.SLOT_SECONDARY)
 	if not can_shoot:
 		wants_fire = false
 		return

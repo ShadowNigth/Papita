@@ -42,6 +42,7 @@ var hostages: Array[Hostage] = []
 var bomb: Bomb
 var pickups: Array[Node] = []
 var smoke_clouds: Array[Dictionary] = []
+var molotov_fires: Array[MolotovFire] = []
 
 var score_ct := 0
 var score_t := 0
@@ -455,10 +456,16 @@ func _bot_buy(bot: Bot) -> void:
 	if bot.armor <= 0 and bot.money >= 650:
 		bot.money -= 650
 		bot.equip_armor(false)
-	if bot.money >= 1000 and _rng.randf() < 0.35:
+	if bot.money >= 900 and _rng.randf() < 0.34:
+		bot.money -= 400
+		bot.give_weapon("molotov", false)
+	elif bot.money >= 1000 and _rng.randf() < 0.35:
 		bot.money -= 300
 		bot.give_weapon("hegrenade", false)
-	if bot.money >= 350 and _rng.randf() < 0.3:
+	if bot.money >= 500 and _rng.randf() < 0.25:
+		bot.money -= 300
+		bot.give_weapon("smokegrenade", false)
+	elif bot.money >= 350 and _rng.randf() < 0.3:
 		bot.money -= 200
 		bot.give_weapon("flashbang", false)
 	bot.select_slot(Content.SLOT_PRIMARY if bot.primary_id != "" else Content.SLOT_SECONDARY)
@@ -873,7 +880,11 @@ func _site_at(pos: Vector3) -> String:
 	for s in layout.get("sites", []):
 		var center: Vector3 = s.center
 		var size: Vector2 = s.size
-		if absf(pos.x - center.x) < size.x * 0.5 and absf(pos.z - center.z) < size.y * 0.5:
+		if (
+			absf(pos.x - center.x) < size.x * 0.5
+			and absf(pos.z - center.z) < size.y * 0.5
+			and absf(pos.y - center.y) < 3.6
+		):
 			return String(s.name)
 	return ""
 
@@ -955,19 +966,36 @@ func _clear_bomb() -> void:
 
 func _clear_smokes() -> void:
 	smoke_clouds.clear()
+	for f in molotov_fires:
+		if f != null and is_instance_valid(f):
+			f.queue_free()
+	molotov_fires.clear()
 
 
 # --- Utilidades de combate -----------------------------------------------------
 
 
 func spawn_pickup(
-	weapon_id: String, position: Vector3, _id: String, mag: int, reserve: int
+	weapon_id: String,
+	position: Vector3,
+	_id: String,
+	mag: int,
+	reserve: int,
+	initial_vel: Vector3 = Vector3.ZERO
 ) -> void:
 	var p := WeaponPickup.new()
-	p.setup(weapon_id, mag, reserve)
+	p.setup(weapon_id, mag, reserve, initial_vel)
 	add_child(p)
 	p.global_position = position
 	pickups.append(p)
+
+
+func spawn_molotov_fire(pos: Vector3, attacker: Combatant) -> void:
+	var fire := MolotovFire.new()
+	fire.position = pos
+	fire.setup(attacker, self)
+	add_child(fire)
+	molotov_fires.append(fire)
 
 
 func spawn_grenade(attacker: Combatant, id: String, position: Vector3, velocity: Vector3) -> void:
@@ -990,6 +1018,29 @@ func explode(
 		var d := player.global_position.distance_to(center)
 		if d < radius * 2.5:
 			player.apply_shake(clampf(1.4 - d / (radius * 2.5), 0.0, 1.2))
+	# Fisica estilo CS2: la onda expansiva lanza props fisicos, armas tiradas,
+	# rompe cristales cercanos y disipa temporalmente el humo (HE vs Smoke).
+	var blast_r := radius * 1.35
+	for node in get_tree().get_nodes_in_group("physics_prop"):
+		if node is PhysicsProp and is_instance_valid(node):
+			(node as PhysicsProp).apply_blast(center, blast_r, damage * 0.22)
+	for pk in pickups:
+		if pk != null and is_instance_valid(pk) and pk is WeaponPickup:
+			(pk as WeaponPickup).apply_blast(center, blast_r, 15.0)
+	if map_builder and map_builder._root_props:
+		for ch in map_builder._root_props.get_children():
+			if ch is StaticBody3D and (ch as StaticBody3D).has_meta("breakable_hp"):
+				var bsb := ch as StaticBody3D
+				var bc: Vector3 = bsb.get_meta("breakable_center", bsb.global_position)
+				var bdist := bc.distance_to(center)
+				if bdist < blast_r:
+					BspLoader.damage_breakable(bsb, damage * (1.0 - bdist / blast_r))
+	var now_ms := Time.get_ticks_msec()
+	for s in smoke_clouds:
+		var spos: Vector3 = s.pos
+		if spos.distance_to(center) <= float(s.radius) + radius * 0.45:
+			s["parted_until"] = now_ms + 1850
+			Fx.steam_puff(self, spos + Vector3(0.0, 0.4, 0.0), 2.8)
 	for c in all_combatants:
 		if not is_instance_valid(c) or not c.alive:
 			continue
@@ -1045,9 +1096,41 @@ func flash_at(pos: Vector3, attacker: Node) -> void:
 
 
 func add_smoke(pos: Vector3, radius: float, duration: float) -> void:
-	smoke_clouds.append(
-		{"pos": pos, "radius": radius, "until": Time.get_ticks_msec() + duration * 1000.0}
-	)
+	var smoke_entry := {
+		"pos": pos,
+		"radius": radius,
+		"until": Time.get_ticks_msec() + duration * 1000.0,
+		"parted_until": 0,
+	}
+	smoke_clouds.append(smoke_entry)
+	# Como en CS2: la granada de humo apaga instantaneamente el fuego de Molotov.
+	for i in range(molotov_fires.size() - 1, -1, -1):
+		var f := molotov_fires[i]
+		if f == null or not is_instance_valid(f):
+			molotov_fires.remove_at(i)
+			continue
+		f.extinguish_near(pos, radius + 0.9)
+
+
+func get_active_smokes() -> Array:
+	var out: Array = []
+	var now := Time.get_ticks_msec()
+	for s in smoke_clouds:
+		if int(s.get("parted_until", 0)) > now:
+			continue
+		out.append(s)
+	return out
+
+
+func is_point_smoked(pos: Vector3) -> bool:
+	var now := Time.get_ticks_msec()
+	for s in smoke_clouds:
+		if int(s.get("parted_until", 0)) > now:
+			continue
+		var center: Vector3 = s.pos
+		if pos.distance_to(center) <= float(s.radius) + 0.8:
+			return true
+	return false
 
 
 func _expire_smokes(_delta: float) -> void:
@@ -1055,10 +1138,16 @@ func _expire_smokes(_delta: float) -> void:
 	for i in range(smoke_clouds.size() - 1, -1, -1):
 		if int(smoke_clouds[i].until) < now:
 			smoke_clouds.remove_at(i)
+	for j in range(molotov_fires.size() - 1, -1, -1):
+		if molotov_fires[j] == null or not is_instance_valid(molotov_fires[j]):
+			molotov_fires.remove_at(j)
 
 
 func is_smoked(a: Vector3, b: Vector3) -> bool:
+	var now := Time.get_ticks_msec()
 	for s in smoke_clouds:
+		if int(s.get("parted_until", 0)) > now:
+			continue
 		var center: Vector3 = s.pos
 		if _segment_sphere(a, b, center, float(s.radius)):
 			return true
@@ -1254,8 +1343,8 @@ func _build_dm_spawns() -> void:
 			raw_candidates.append(sc + off)
 	for hp: Vector3 in layout.get("hostages", []):
 		raw_candidates.append(hp)
-	if layout.has("rescue"):
-		raw_candidates.append(layout.get("rescue", Vector3.ZERO))
+	for rp: Vector3 in layout.get("rescue", []):
+		raw_candidates.append(rp)
 	if nav != null and nav.ready and nav.cols > 6 and nav.rows > 6:
 		var step_x := maxi(3, nav.cols / 9)
 		var step_z := maxi(3, nav.rows / 9)
@@ -1498,7 +1587,7 @@ func _bot_equip_dm(bot: Bot) -> void:
 	bot.give_weapon(pri, true)
 	bot.primary_id = pri
 	if _rng.randf() < 0.25:
-		bot.give_weapon("hegrenade", false)
+		bot.give_weapon("molotov" if _rng.randf() < 0.5 else "hegrenade", false)
 	_restock_ammo(bot)
 	bot.select_slot(Content.SLOT_PRIMARY)
 	bot.objective_type = "roam"

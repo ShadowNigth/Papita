@@ -7,7 +7,7 @@ extends RefCounted
 
 class_name MaterialLib
 
-const SIZE := 96
+const SIZE := 160
 const SHADER := preload("res://shaders/surface.gdshader")
 
 const PALETTES := {
@@ -146,6 +146,84 @@ static func surface(
 	return mat
 
 
+## Material PBR realista neutral para geometria .bsp original: el patron arquitectonico,
+## normal map, AO, rugosidad y metalicidad provienen de MaterialLib, mientras que el
+## color exacto del WAD + lightmap radiosity del .bsp entra por COLOR de vertice.
+static func bsp_surface(kind: String, variant: int = 0, wetness: float = 0.0) -> ShaderMaterial:
+	var key := "bsp|%s|%d|%.2f" % [kind, variant, wetness]
+	if _cache.has(key):
+		return _cache[key]
+	var base := Color(0.92, 0.92, 0.92)
+	var maps := _generate(kind, base, variant)
+	var mat := ShaderMaterial.new()
+	mat.shader = SHADER
+	mat.set_shader_parameter("albedo_tex", maps.albedo)
+	mat.set_shader_parameter("normal_tex", maps.normal)
+	mat.set_shader_parameter("orm_tex", maps.orm)
+	mat.set_shader_parameter("tint", Color(1, 1, 1))
+	mat.set_shader_parameter("uv_scale", maps.uv * 0.42)
+	mat.set_shader_parameter("normal_strength", maps.normal_strength * 1.18)
+	mat.set_shader_parameter("roughness_scale", maps.roughness)
+	mat.set_shader_parameter("metallic_scale", maps.metallic)
+	mat.set_shader_parameter("wear", maps.wear * 0.7)
+	mat.set_shader_parameter("wetness", wetness)
+	mat.set_shader_parameter("moss", maps.moss)
+	mat.set_shader_parameter("detail_scale", maps.detail)
+	_cache[key] = mat
+	return mat
+
+
+## Rejilla / alambrada / escalera recortada con canal alfa para texturas '{' de CS 1.5.
+static func cutout_grate(tint_col: Color = Color(0.55, 0.56, 0.54)) -> StandardMaterial3D:
+	var key := "grate|%s" % tint_col.to_html()
+	if _util_cache.has(key):
+		return _util_cache[key]
+	var sz := 64
+	var img := Image.create(sz, sz, false, Image.FORMAT_RGBA8)
+	for y in sz:
+		for x in sz:
+			var gx := x % 8
+			var gy := y % 8
+			var bar := gx < 2 or gy < 2
+			if bar:
+				var shade := 0.82 + 0.18 * sin(float(x + y) * 0.4)
+				img.set_pixel(x, y, Color(shade, shade, shade, 1.0))
+			else:
+				img.set_pixel(x, y, Color(0, 0, 0, 0))
+	img.generate_mipmaps()
+	var tex := ImageTexture.create_from_image(img)
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	mat.alpha_scissor_threshold = 0.5
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.vertex_color_use_as_albedo = true
+	mat.albedo_color = tint_col
+	mat.albedo_texture = tex
+	mat.uv1_triplanar = true
+	mat.uv1_world_triplanar = true
+	mat.uv1_scale = Vector3(1.6, 1.6, 1.6)
+	mat.roughness = 0.45
+	mat.metallic = 0.75
+	_util_cache[key] = mat
+	return mat
+
+
+## Vidrio reflectante semitransparente estilo CS2 para ventanas y tragaluces.
+static func glass_pane(tint_col: Color = Color(0.68, 0.82, 0.88, 0.36)) -> StandardMaterial3D:
+	var key := "glass|%s" % tint_col.to_html()
+	if _util_cache.has(key):
+		return _util_cache[key]
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.albedo_color = tint_col
+	mat.roughness = 0.08
+	mat.metallic = 0.35
+	mat.metallic_specular = 0.9
+	_util_cache[key] = mat
+	return mat
+
+
 static func _palette_key(kind: String) -> String:
 	match kind:
 		"brick", "cobble", "carpet", "sandbag", "tile":
@@ -247,7 +325,24 @@ static func _generate(kind: String, base: Color, variant: int) -> Dictionary:
 					r = 0.45 if not grout else 0.9
 					uv = 1.4
 					metallic_val = 0.05
-				"wood", "plank", "crate", "door":
+				"crate":
+					var border := x < 14 or x >= SIZE - 14 or y < 14 or y >= SIZE - 14
+					var diag := absf(float(x - y)) < 8.0 or absf(float(x + y - SIZE)) < 8.0
+					var plank_c := int(y / 20.0)
+					var grain_c := sin((x + plank_c * 17) * 0.35 + n * 5.0) * 0.5 + 0.5
+					var seam_c := 0.0 if (y % 20 < 2 and not border) else 1.0
+					if border or diag:
+						col = base.lightened(0.06).darkened(grain_c * 0.14)
+						h = 0.88 + grain_c * 0.1
+						r = 0.66
+					else:
+						col = base.darkened(0.14 + grain_c * 0.2 + (1.0 - seam_c) * 0.22)
+						h = 0.38 + grain_c * 0.35 * seam_c
+						r = 0.76
+					uv = 1.15
+					wear = 0.35
+					normal_strength = 1.15
+				"wood", "plank", "door":
 					var plank := int(x / 22.0)
 					var grain := sin((y + plank * 13) * 0.5 + n * 6.0) * 0.5 + 0.5
 					var seam := 0.0 if x % 22 < 1 else 1.0
@@ -257,7 +352,7 @@ static func _generate(kind: String, base: Color, variant: int) -> Dictionary:
 					r = 0.72
 					uv = 1.0
 					wear = 0.4
-					normal_strength = 0.7
+					normal_strength = 0.85
 				"metal", "pipe", "container":
 					col = base.darkened(n * 0.16)
 					col = col.lerp(base.lightened(0.18), n2 * 0.35)

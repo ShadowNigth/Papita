@@ -739,7 +739,7 @@ func _run_command(cmd: String, args: Array) -> String:
 				return "Uso: give <id de arma>"
 			var id := String(args[0])
 			if not Content.WEAPONS.has(id):
-				return "Arma desconocida. Prueba ak47, m4a1, awp, deagle, mp5, hegrenade..."
+				return "Arma desconocida. Prueba ak47, m4a1, awp, deagle, mp5, molotov, hegrenade..."
 			game.player.give_weapon(id, true)
 			return "Entregado: " + id
 		"money":
@@ -905,16 +905,18 @@ func _build_help() -> void:
 		var k := UITheme.label(InputSetup.key_name(action, bindings), 14, UITheme.ACCENT, true)
 		grid.add_child(k)
 	UITheme.hsep(vb)
-	vb.add_child(
-		UITheme.label(
-			"Ratón: apuntar / disparar (izq) / mira y silenciador (der) / rueda: cambiar arma",
-			13,
-			UITheme.TEXT_DIM
-		)
+	var help_line_1 := (
+		"Ratón: disparar (izq) / mira, silenciador o ráfaga (der) / rueda: arma  -  "
+		+ "[F] Inspeccionar arma/cuchillo/granada/C4"
 	)
-	vb.add_child(
-		UITheme.label("F1 cierra esta ayuda  -  TAB marcador  -  ESC pausa", 13, UITheme.TEXT_DIM)
+	var lbl_1 := UITheme.label(help_line_1, 13, UITheme.TEXT_DIM)
+	vb.add_child(lbl_1)
+	var lbl_2 := UITheme.label(
+		"F1 cierra esta ayuda  -  TAB marcador  -  ESC pausa  -  Humo apaga Molotov (CS2)",
+		13,
+		UITheme.TEXT_DIM
 	)
+	vb.add_child(lbl_2)
 
 
 func toggle_help() -> void:

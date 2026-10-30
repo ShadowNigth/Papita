@@ -332,3 +332,90 @@ static func muzzle_flash_mesh(muzzle_pos: Vector3, dir: Vector3) -> MeshInstance
 	mi.global_position = muzzle_pos
 	mi.look_at(muzzle_pos + dir, Vector3.UP)
 	return mi
+
+
+## Fragmentos fisicos estilo CS2 al romper cajas de madera, cristales o rejillas.
+static func debris_burst(parent: Node, pos: Vector3, kind: String = "wood", count: int = 8) -> void:
+	if parent == null or not is_instance_valid(parent):
+		return
+	_ensure_assets()
+	var root := Node3D.new()
+	parent.add_child(root)
+	root.global_position = pos
+	var col := Color(0.56, 0.38, 0.2)
+	var sfx := "crate_break"
+	if kind == "glass":
+		col = Color(0.75, 0.9, 0.96, 0.72)
+		sfx = "glass_break"
+	elif kind == "metal":
+		col = Color(0.45, 0.47, 0.5)
+		sfx = "prop_metal"
+	var p := _particles(root, count * 2, 0.85, _spark_tex)
+	p.direction = Vector3.UP
+	p.spread = 160.0
+	p.initial_velocity_min = 2.6
+	p.initial_velocity_max = 7.2
+	p.gravity = Vector3(0, -14.0, 0)
+	p.scale_amount_min = 0.05
+	p.scale_amount_max = 0.14
+	p.color = col
+	p.emitting = true
+	for _i in mini(count, 6):
+		var rb := RigidBody3D.new()
+		rb.collision_layer = 0
+		rb.collision_mask = 1
+		rb.mass = 0.25
+		var cs := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = (Vector3(0.18, 0.02, 0.14) if kind == "glass" else Vector3(0.24, 0.06, 0.09))
+		cs.shape = bs
+		rb.add_child(cs)
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = bs.size
+		mi.mesh = bm
+		mi.material_override = (
+			MaterialLib.glass_pane(col)
+			if kind == "glass"
+			else MaterialLib.simple(col, 0.72, 0.6 if kind == "metal" else 0.05)
+		)
+		rb.add_child(mi)
+		root.add_child(rb)
+		rb.position = Vector3(
+			randf_range(-0.25, 0.25), randf_range(-0.15, 0.25), randf_range(-0.25, 0.25)
+		)
+		rb.linear_velocity = Vector3(
+			randf_range(-4.5, 4.5), randf_range(2.0, 6.0), randf_range(-4.5, 4.5)
+		)
+		rb.angular_velocity = Vector3(
+			randf_range(-9.0, 9.0), randf_range(-9.0, 9.0), randf_range(-9.0, 9.0)
+		)
+	AudioBank.play_at(sfx, root, pos, -1.5, randf_range(0.94, 1.08), 38.0)
+	var timer := root.get_tree().create_timer(2.8)
+	timer.timeout.connect(root.queue_free)
+
+
+## Nube de vapor blanco cuando una granada de humo apaga una Molotov (interaccion CS2).
+static func steam_puff(parent: Node, pos: Vector3, radius: float = 2.6) -> void:
+	if parent == null or not is_instance_valid(parent):
+		return
+	_ensure_assets()
+	var root := Node3D.new()
+	parent.add_child(root)
+	root.global_position = pos
+	var p := _particles(root, 20, 1.8, _soft_tex)
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	p.emission_sphere_radius = radius * 0.45
+	p.direction = Vector3.UP
+	p.spread = 85.0
+	p.initial_velocity_min = 1.2
+	p.initial_velocity_max = 3.2
+	p.gravity = Vector3(0, 0.9, 0)
+	p.scale_amount_min = 0.8
+	p.scale_amount_max = 2.0
+	p.color = Color(0.92, 0.94, 0.96, 0.48)
+	p.material_override = _smoke_mat
+	p.emitting = true
+	AudioBank.play_at("smoke", root, pos, -3.0, 1.32, 35.0)
+	var timer := root.get_tree().create_timer(2.2)
+	timer.timeout.connect(root.queue_free)

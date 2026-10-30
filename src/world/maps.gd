@@ -271,7 +271,22 @@ static func _site(
 # --- Mapas ---------------------------------------------------------------------
 
 
+static func _map_meta(id: String) -> Dictionary:
+	for m: Dictionary in Content.MAPS:
+		if String(m.get("id", "")) == id:
+			return m
+	return {}
+
+
 static func build(id: String) -> Dictionary:
+	var meta: Dictionary = _map_meta(id)
+	var bsp_name := String(meta.get("bsp", ""))
+	if bsp_name != "":
+		var bsp_layout := BspLoader.load_metadata(
+			id, bsp_name, String(meta.get("theme", "desert")), String(meta.get("sky", "day"))
+		)
+		if not bsp_layout.is_empty():
+			return bsp_layout
 	match id:
 		"de_dust2":
 			return _dust2()

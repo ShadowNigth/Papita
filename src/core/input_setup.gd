@@ -23,8 +23,8 @@ const DEFAULT_KEYS := {
 	"slot3": KEY_3,
 	"slot4": KEY_4,
 	"slot5": KEY_5,
-	"flashlight": KEY_F,
-	"inspect": KEY_I,
+	"inspect": KEY_F,
+	"flashlight": KEY_T,
 	"scoreboard": KEY_TAB,
 	"pause": KEY_ESCAPE,
 	"console": KEY_QUOTELEFT,
@@ -66,7 +66,7 @@ const LABELS := {
 	"slot4": "Granada",
 	"slot5": "C4",
 	"flashlight": "Linterna",
-	"inspect": "Inspeccionar arma",
+	"inspect": "Inspeccionar arma / objeto",
 	"scoreboard": "Marcador",
 	"pause": "Pausa",
 	"console": "Consola",
@@ -91,14 +91,21 @@ static func ensure_actions() -> void:
 
 static func apply_bindings(bindings: Dictionary) -> void:
 	ensure_actions()
+	var used_keys: Dictionary = {}
 	for action in DEFAULT_KEYS.keys():
 		InputMap.action_erase_events(action)
 		var key: int = int(bindings.get(action, DEFAULT_KEYS[action]))
 		if key == 0:
 			key = DEFAULT_KEYS[action]
+		used_keys[key] = true
 		var ev := InputEventKey.new()
 		ev.physical_keycode = key
 		InputMap.action_add_event(action, ev)
+	# Atajo secundario [I] para inspeccion si queda libre (ademas de [F] estilo CS2).
+	if not used_keys.has(KEY_I) and InputMap.has_action("inspect"):
+		var ev_i := InputEventKey.new()
+		ev_i.physical_keycode = KEY_I
+		InputMap.action_add_event("inspect", ev_i)
 
 
 static func default_bindings() -> Dictionary:

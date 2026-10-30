@@ -162,6 +162,7 @@ AudioServer DisplayServer OS Engine Time Input InputMap FileAccess DirAccess Con
 JSON ResourceLoader Thread Mutex Callable Signal RID StringName NodePath Rect2i Vector2i
 Vector3i Threading GeoNode TweenProperty BoxContainer CheckButton GeometryInstance3D
 InputEventKey InputEventMouseButton Marker3D PhysicsMaterial Sprite3D TabContainer
+Area3D ConcavePolygonShape3D Gradient GradientTexture1D RigidBody3D PhysicsDirectBodyState3D
 TextServer TranslationServer AudioEffectInstance SceneState ViewportTexture StyleBoxTexture
 SpriteBase3D RenderMode CollisionObject3D VisualInstance3D GeometryInstance3D
 AStar3D Animation AnimationLibrary AnimationPlayer BoneAttachment3D Mesh Skeleton3D SurfaceTool""".split())

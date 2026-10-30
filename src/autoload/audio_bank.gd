@@ -87,6 +87,22 @@ const SOUND_POOLS := {
 	"fire_in_hole": ["radio/ct_fireinhole.wav"],
 	"flashbang": ["weapons/flashbang-1.wav", "weapons/flashbang-2.wav"],
 	"smoke": ["weapons/sg_explode.wav"],
+	"molotov_ignite": ["ambience/flameburst1.wav"],
+	"molotov_loop": ["ambience/burning1.wav"],
+	"glass_break": ["debris/bustglass1.wav", "debris/bustglass2.wav"],
+	"glass_hit": ["debris/glass1.wav", "debris/glass2.wav"],
+	"crate_break": ["debris/bustcrate1.wav", "debris/bustcrate2.wav"],
+	"prop_wood": ["debris/wood1.wav"],
+	"prop_metal": ["debris/metal1.wav", "debris/metal2.wav"],
+	"inspect_foley": ["items/gunpickup2.wav"],
+	"ladder_step":
+	[
+		"player/pl_ladder1.wav",
+		"player/pl_ladder2.wav",
+		"player/pl_ladder3.wav",
+		"player/pl_ladder4.wav",
+	],
+	"door_move": ["doors/doormove1.wav"],
 	"beep": ["weapons/c4_beep1.wav"],
 	"plant": ["weapons/c4_plant.wav"],
 	"bomb_planted_voice": ["radio/bombpl.wav"],
@@ -352,7 +368,7 @@ func _preload_hot_sounds() -> void:
 		"weapons/m4a1_unsil-1.wav",
 		"weapons/m4a1-1.wav",
 		"weapons/awp1.wav",
-		"weapons/glock18-1.wav",
+		"weapons/glock18-2.wav",
 		"weapons/usp_unsil-1.wav",
 		"weapons/usp1.wav",
 		"weapons/deagle-1.wav",
@@ -371,16 +387,78 @@ func _load_wav(rel_path: String, looped: bool = false) -> AudioStreamWAV:
 	var full_path := CS15_DIR + rel_path
 	var wav: AudioStreamWAV = null
 	if FileAccess.file_exists(full_path):
-		var opts: Dictionary = {"edit/loop_mode": 1}
-		if looped:
-			opts = {"edit/loop_mode": 2, "edit/loop_begin": 0, "edit/loop_end": -1}
-		wav = AudioStreamWAV.load_from_file(full_path, opts)
+		var raw := FileAccess.get_file_as_bytes(full_path)
+		if raw.size() >= 44:
+			wav = _parse_pcm_wav(raw, looped)
 	elif ResourceLoader.exists(full_path):
 		var res := ResourceLoader.load(full_path)
 		if res is AudioStreamWAV:
 			wav = res as AudioStreamWAV
 	if wav != null:
 		_wav_cache[cache_key] = wav
+	return wav
+
+
+## Lector PCM RIFF seguro con verificacion de limites (evita el seek() fuera de rango
+## de AudioStreamWAV.load_from_file en WAVs clasicos de GoldSrc con chunks impares).
+func _parse_pcm_wav(bytes: PackedByteArray, looped: bool) -> AudioStreamWAV:
+	var total := bytes.size()
+	if total < 44:
+		return null
+	if bytes.decode_u32(0) != 0x46464952 or bytes.decode_u32(8) != 0x45564157:
+		return null
+	var pos := 12
+	var channels := 1
+	var sample_rate := 22050
+	var bits_per_sample := 8
+	var fmt_tag := 1
+	var data_ofs := -1
+	var data_len := 0
+	while pos + 8 <= total:
+		var cid := bytes.decode_u32(pos)
+		var csz := bytes.decode_u32(pos + 4)
+		var payload := pos + 8
+		if cid == 0x20746D66 and payload + 16 <= total:
+			fmt_tag = bytes.decode_u16(payload)
+			channels = maxi(1, bytes.decode_u16(payload + 2))
+			sample_rate = maxi(4000, bytes.decode_u32(payload + 4))
+			bits_per_sample = bytes.decode_u16(payload + 14)
+		elif cid == 0x61746164:
+			data_ofs = payload
+			data_len = mini(csz, maxi(0, total - payload))
+			break
+		var step: int = csz + (csz & 1)
+		if step <= 0 or payload + step > total:
+			if payload + csz <= total:
+				pos = payload + csz
+			else:
+				break
+		else:
+			pos = payload + step
+	if fmt_tag != 1 or data_ofs < 0 or data_len <= 0:
+		return null
+	var pcm := bytes.slice(data_ofs, data_ofs + data_len)
+	var wav := AudioStreamWAV.new()
+	if bits_per_sample == 8:
+		for i in pcm.size():
+			pcm[i] = pcm[i] ^ 0x80
+		wav.format = AudioStreamWAV.FORMAT_8_BITS
+	elif bits_per_sample == 16:
+		if (pcm.size() & 1) == 1:
+			pcm.resize(pcm.size() - 1)
+		wav.format = AudioStreamWAV.FORMAT_16_BITS
+	else:
+		return null
+	wav.mix_rate = sample_rate
+	wav.stereo = channels >= 2
+	wav.data = pcm
+	if looped:
+		var bytes_per_frame := maxi(1, channels * (bits_per_sample / 8))
+		wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		wav.loop_begin = 0
+		wav.loop_end = maxi(1, pcm.size() / bytes_per_frame)
+	else:
+		wav.loop_mode = AudioStreamWAV.LOOP_DISABLED
 	return wav
 
 

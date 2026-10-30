@@ -208,6 +208,8 @@ static func build(def: Dictionary, upright: bool = true) -> Node3D:
 			sphere.position = Vector3(0, 0, 0.06)
 			root.add_child(sphere)
 			_box(root, Vector3(0.03, 0.02, 0.03), Vector3(0, 0.06, 0.06), _dark)
+		"molotov":
+			_build_molotov_parts(root)
 		"c4":
 			_box(root, Vector3(0.22, 0.06, 0.15), Vector3(0, 0, 0.07), _tan)
 			_box(
@@ -251,6 +253,45 @@ static func build_single_pistol(metal: Material, accent: Material) -> Node3D:
 	_box(root, Vector3(0.04, 0.11, 0.05), Vector3(0, -0.07, -0.02), accent, Vector3(-8, 0, 0))
 	_box(root, Vector3(0.03, 0.03, 0.14), Vector3(0, 0.018, 0.15), _dark)
 	return root
+
+
+static func _build_molotov_parts(root: Node3D) -> void:
+	_materials()
+	var bottle_glass := StandardMaterial3D.new()
+	bottle_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	bottle_glass.albedo_color = Color(0.16, 0.28, 0.14, 0.78)
+	bottle_glass.roughness = 0.12
+	bottle_glass.metallic = 0.25
+	var fuel_mat := StandardMaterial3D.new()
+	fuel_mat.albedo_color = Color(0.86, 0.44, 0.08)
+	fuel_mat.roughness = 0.25
+	fuel_mat.emission_enabled = true
+	fuel_mat.emission = Color(0.55, 0.22, 0.03)
+	fuel_mat.emission_energy_multiplier = 0.45
+	var rag_mat := StandardMaterial3D.new()
+	rag_mat.albedo_color = Color(0.76, 0.7, 0.58)
+	rag_mat.roughness = 0.92
+	# Cuerpo de botella de vidrio + gasolina interior + cuello + trapo encendido.
+	_cyl(root, 0.042, 0.15, Vector3(0, -0.02, 0.04), bottle_glass, Vector3.ZERO)
+	_cyl(root, 0.036, 0.105, Vector3(0, -0.038, 0.04), fuel_mat, Vector3.ZERO)
+	_cyl(root, 0.017, 0.075, Vector3(0, 0.085, 0.04), bottle_glass, Vector3.ZERO)
+	_cyl(root, 0.02, 0.022, Vector3(0, 0.068, 0.04), _dark, Vector3.ZERO)
+	_box(
+		root,
+		Vector3(0.024, 0.06, 0.016),
+		Vector3(0.005, 0.135, 0.046),
+		rag_mat,
+		Vector3(16, 0, -14)
+	)
+	var flame := MeshInstance3D.new()
+	var fs := SphereMesh.new()
+	fs.radius = 0.022
+	fs.height = 0.055
+	flame.mesh = fs
+	flame.position = Vector3(0.012, 0.168, 0.052)
+	flame.material_override = MaterialLib.emissive(Color(1.0, 0.62, 0.16), 3.6)
+	flame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(flame)
 
 
 static func muzzle_of(node: Node3D) -> Node3D:

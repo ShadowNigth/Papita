@@ -30,6 +30,9 @@ var _draw_t := 0.0
 var _ads := false
 var _hide_for_scope := false
 var _inspect_t := 0.0
+var _inspect_dur := 3.2
+var _inspect_variant := 0
+var _wick_light: OmniLight3D
 var _flash: Sprite3D
 var _flash_light: OmniLight3D
 var _base_pos := Vector3.ZERO
@@ -55,6 +58,13 @@ func setup(cam: Camera3D) -> void:
 	_flash_light.omni_range = 4.5
 	_flash_light.shadow_enabled = false
 	add_child(_flash_light)
+	_wick_light = OmniLight3D.new()
+	_wick_light.light_color = Color(1.0, 0.56, 0.16)
+	_wick_light.light_energy = 0.0
+	_wick_light.omni_range = 2.6
+	_wick_light.shadow_enabled = false
+	_wick_light.position = Vector3(0.22, -0.08, -0.36)
+	add_child(_wick_light)
 
 
 func set_weapon(weapon_def: Dictionary, silenced: bool = false) -> void:
@@ -97,9 +107,12 @@ func set_weapon(weapon_def: Dictionary, silenced: bool = false) -> void:
 		_draw_t = 1.0
 
 	_reload_t = 0.0
+	_inspect_t = 0.0
 	_kick = 0.0
 	_kick_rot = 0.0
 	_ads = false
+	if _wick_light:
+		_wick_light.light_energy = 1.15 if wid == "molotov" else 0.0
 	visible = true
 
 
@@ -166,6 +179,7 @@ func set_silenced(enabled: bool, animate_toggle: bool = false) -> void:
 
 
 func on_fire() -> void:
+	_inspect_t = 0.0
 	var recoil: float = clampf(float(def.get("recoil", 1.0)) * 0.008, 0.003, 0.020)
 	_kick = minf(_kick + recoil, 0.024)
 	_kick_rot = minf(_kick_rot + recoil * 1.8, 0.075)
@@ -201,6 +215,7 @@ func on_fire() -> void:
 
 
 func on_knife(hit: bool = false, heavy: bool = false) -> void:
+	_inspect_t = 0.0
 	if _using_mdl:
 		if heavy:
 			if hit:
@@ -215,16 +230,19 @@ func on_knife(hit: bool = false, heavy: bool = false) -> void:
 
 
 func on_grenade_throw() -> void:
+	_inspect_t = 0.0
 	if _using_mdl:
 		_play_action(["throw", "pullpin"])
 
 
 func on_c4_plant() -> void:
+	_inspect_t = 0.0
 	if _using_mdl:
 		_play_action(["pressbutton"])
 
 
 func start_reload(time: float) -> void:
+	_inspect_t = 0.0
 	_reload_time = maxf(time, 0.4)
 	if _using_mdl:
 		if bool(def.get("reload_shell", false)):
@@ -236,10 +254,105 @@ func start_reload(time: float) -> void:
 
 
 func inspect() -> void:
-	_inspect_t = 1.0
+	if _reload_t > 0.05 or _ads or _hide_for_scope:
+		return
+	var cls := String(def.get("cls", "rifle"))
+	var wid := String(def.get("id", ""))
+	_inspect_variant = (_inspect_variant + 1) % 3
+	match cls:
+		"knife":
+			_inspect_dur = 2.85
+			AudioBank.play_2d("knife_deploy", -10.0, _rng.randf_range(0.96, 1.06))
+		"pistol":
+			_inspect_dur = 2.65 if (wid == "deagle" and _inspect_variant == 2) else 2.55
+			AudioBank.play_2d("inspect_foley", -13.0, _rng.randf_range(1.04, 1.14))
+		"grenade", "c4":
+			_inspect_dur = 2.45
+			AudioBank.play_2d("inspect_foley", -14.0, _rng.randf_range(1.08, 1.18))
+		_:
+			_inspect_dur = 3.45
+			AudioBank.play_2d("inspect_foley", -12.0, _rng.randf_range(0.95, 1.05))
+	_inspect_t = _inspect_dur
+	if _using_mdl:
+		_play_idle()
+
+
+func _compute_inspect_pose(progress: float) -> Dictionary:
+	# progress va de 0.0 (inicio) a 1.0 (fin). Envolvente suave de entrada y salida.
+	var env := sin(clampf(progress / 0.16, 0.0, 1.0) * PI * 0.5)
+	if progress > 0.82:
+		env *= cos(clampf((progress - 0.82) / 0.18, 0.0, 1.0) * PI * 0.5)
+	var cls := String(def.get("cls", "rifle"))
+	var wid := String(def.get("id", ""))
+	var pos_off := Vector3.ZERO
+	var rot_off := Vector3.ZERO
+	match cls:
+		"knife":
+			if _inspect_variant == 0:
+				# Giro de muneca + exhibicion de ambos lados de la hoja (estilo CS2).
+				var flip := sin(progress * PI * 2.0)
+				pos_off = Vector3(-0.045, 0.032, -0.025) * env
+				rot_off = Vector3(0.26 * env, 0.58 * flip * env, 0.82 * sin(progress * PI) * env)
+			elif _inspect_variant == 1:
+				# Flourish / pirueta completa de 360 grados sobre el eje de la hoja.
+				var spin := smoothstep(0.08, 0.72, progress) * TAU
+				pos_off = Vector3(-0.035, 0.048 * sin(progress * PI), -0.02) * env
+				rot_off = Vector3(spin, 0.34 * env, 0.42 * sin(progress * PI) * env)
+			else:
+				# Inspeccion tactica del filo a contraluz.
+				var wave := sin(progress * PI * 1.5)
+				pos_off = Vector3(-0.052, 0.024, -0.03) * env
+				rot_off = Vector3(-0.32 * env, -0.62 * wave * env, -0.68 * env)
+		"pistol":
+			if wid == "deagle" and _inspect_variant == 2:
+				# Inspeccion rara de Desert Eagle girando en el dedo indice (CS2).
+				var dspin := smoothstep(0.06, 0.84, progress) * TAU * 2.0
+				pos_off = Vector3(-0.03, 0.035, -0.015) * env
+				rot_off = Vector3(dspin, 0.22 * env, 0.18 * sin(progress * PI * 2.0) * env)
+			else:
+				var p_side := sin(progress * PI * 2.0)
+				pos_off = Vector3(-0.042, 0.026, -0.018) * env
+				rot_off = Vector3(0.18 * env, 0.52 * p_side * env, 0.66 * p_side * env)
+		"grenade":
+			if wid == "molotov":
+				# Agita suavemente la botella incendiaria e inspecciona la mecha encendida.
+				var swirl := sin(progress * PI * 3.0)
+				pos_off = Vector3(-0.05, 0.03 + 0.012 * swirl, -0.04) * env
+				rot_off = Vector3(
+					0.28 * env, 0.45 * swirl * env, 0.52 * sin(progress * PI * 2.0) * env
+				)
+			else:
+				# Rueda la granada en la mano mostrando espoleta y anilla.
+				var g_turn := sin(progress * PI * 2.0)
+				pos_off = Vector3(-0.04, 0.032, -0.025) * env
+				rot_off = Vector3(0.32 * sin(progress * PI) * env, 0.68 * g_turn * env, 0.48 * env)
+		"c4":
+			# Eleva e inclina el bloque de C4 hacia la vista para leer el teclado y pantalla.
+			var c_tilt := sin(progress * PI)
+			pos_off = Vector3(-0.055, 0.042, -0.035) * env
+			rot_off = Vector3(
+				0.46 * c_tilt * env, 0.28 * sin(progress * PI * 2.0) * env, -0.24 * env
+			)
+		_:
+			# Fusiles, subfusiles, escopetas, francotiradores y M249:
+			# Fase 1 muestra costado izquierdo (cajon de mecanismos / cargador),
+			# Fase 2 gira hacia el otro lado mostrando ventana de expulsion y canon (CS2).
+			var phase1 := (
+				smoothstep(0.05, 0.28, progress) * (1.0 - smoothstep(0.46, 0.62, progress))
+			)
+			var phase2 := (
+				smoothstep(0.48, 0.66, progress) * (1.0 - smoothstep(0.84, 0.98, progress))
+			)
+			pos_off = (
+				Vector3(-0.052, 0.026, -0.022) * phase1 + Vector3(-0.028, 0.018, -0.016) * phase2
+			)
+			rot_off = (Vector3(0.14, 0.48, 0.62) * phase1 + Vector3(-0.10, -0.36, -0.54) * phase2)
+	return {"pos": pos_off, "rot": rot_off}
 
 
 func set_ads(enabled: bool, hide_for_scope: bool = false) -> void:
+	if enabled or hide_for_scope:
+		_inspect_t = 0.0
 	_ads = enabled
 	_hide_for_scope = hide_for_scope
 
@@ -282,13 +395,18 @@ func update(
 		reload_rot = sin(k * PI) * 0.55
 		target.y -= sin(k * PI) * 0.12
 
-	var inspect_yaw := 0.0
-	var inspect_roll := 0.0
+	var inspect_pos := Vector3.ZERO
+	var inspect_rot := Vector3.ZERO
 	if _inspect_t > 0.0:
-		_inspect_t = maxf(0.0, _inspect_t - delta * 1.1)
-		var ik := sin(_inspect_t * PI)
-		inspect_yaw = ik * 0.28
-		inspect_roll = ik * 0.22
+		_inspect_t = maxf(0.0, _inspect_t - delta)
+		var prog := 1.0 - (_inspect_t / maxf(_inspect_dur, 0.1))
+		var pose := _compute_inspect_pose(prog)
+		inspect_pos = pose["pos"]
+		inspect_rot = pose["rot"]
+		target += inspect_pos
+
+	if _wick_light and String(def.get("id", "")) == "molotov":
+		_wick_light.light_energy = 1.05 + sin(float(Time.get_ticks_msec()) * 0.024) * 0.25
 
 	if not _using_mdl and _draw_t > 0.0:
 		_draw_t = maxf(0.0, _draw_t - delta * 3.2)
@@ -296,8 +414,8 @@ func update(
 		target.z -= _draw_t * 0.1
 
 	position = position.lerp(target, clampf(delta * 18.0, 0.0, 1.0))
-	var target_rot := Vector3(_kick_rot, _sway.x * 1.1 + inspect_yaw, reload_rot + inspect_roll)
-	rotation = rotation.lerp(target_rot, clampf(delta * 18.0, 0.0, 1.0))
+	var target_rot := Vector3(_kick_rot, _sway.x * 1.1, reload_rot) + inspect_rot
+	rotation = rotation.lerp(target_rot, clampf(delta * 16.0, 0.0, 1.0))
 	_kick = lerpf(_kick, 0.0, delta * 14.0)
 	_kick_rot = lerpf(_kick_rot, 0.0, delta * 14.0)
 	if _flash and muzzle:

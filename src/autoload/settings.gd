@@ -62,6 +62,7 @@ const DEFAULTS := {
 		"viewmodel_sway": 1.0,
 		"bob": 1.0,
 		"start_money": 800,
+		"controls_v107": true,
 	},
 	"controls": {},
 	"profile":
@@ -207,8 +208,10 @@ func load_settings() -> void:
 	var cfg := ConfigFile.new()
 	var had_file := cfg.load(PATH) == OK
 	var had_perf_v103 := false
+	var had_ctrl_v107 := false
 	if had_file:
 		had_perf_v103 = bool(cfg.get_value("video", "perf_v103", false))
+		had_ctrl_v107 = bool(cfg.get_value("gameplay", "controls_v107", false))
 		for section in cfg.get_sections():
 			if not data.has(section):
 				data[section] = {}
@@ -233,8 +236,16 @@ func load_settings() -> void:
 		data.video["vsync"] = false
 		data.video["perf_v103"] = true
 		data.gameplay["show_fps"] = true
+	if had_file and not had_ctrl_v107:
+		if (
+			int(data.controls.get("flashlight", KEY_F)) == KEY_F
+			and int(data.controls.get("inspect", KEY_I)) == KEY_I
+		):
+			data.controls["inspect"] = KEY_F
+			data.controls["flashlight"] = KEY_T
+		data.gameplay["controls_v107"] = true
 	_loaded = true
-	if had_file and not had_perf_v103:
+	if had_file and (not had_perf_v103 or not had_ctrl_v107):
 		queue_save()
 
 

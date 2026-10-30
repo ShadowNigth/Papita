@@ -374,7 +374,7 @@ func _build_main() -> void:
 			get_tree().quit()
 	)
 	var foot := UITheme.label(
-		"Hecho para jugar sin conexion.  v1.0.0  -  Godot 4.4", 11, UITheme.TEXT_DIM, true
+		"Hecho para jugar sin conexion.  v1.0.7  -  Godot 4.4", 11, UITheme.TEXT_DIM, true
 	)
 	foot.position = Vector2(84, 0)
 	screen.add_child(foot)
@@ -1238,7 +1238,7 @@ func _build_credits() -> void:
 		row.add_child(body)
 		vb.add_child(row)
 	UITheme.hsep(vb)
-	vb.add_child(UITheme.label("Godot 4.4  -  Forward+  -  v1.0.0", 12, UITheme.TEXT_DIM, true))
+	vb.add_child(UITheme.label("Godot 4.4  -  Forward+  -  v1.0.7", 12, UITheme.TEXT_DIM, true))
 
 
 func _open_options() -> void:

@@ -81,8 +81,11 @@ var want_walk := false
 var wants_fire := false
 var trigger_was_down := false
 var crouching := false
+var ladder_contacts := 0
 var aim_pitch := 0.0
 var footstep_timer := 0.0
+var _ladder_sfx_t := 0.0
+var _death_knockback := Vector3.ZERO
 var _was_grounded := true
 var _spawn_position := Vector3.ZERO
 var _slow_timer := 0.0
@@ -103,11 +106,11 @@ func _ready() -> void:
 
 func _build_collision() -> void:
 	capsule = CapsuleShape3D.new()
-	capsule.radius = 0.36
-	capsule.height = 1.8
+	capsule.radius = 0.34
+	capsule.height = 1.76
 	collision_shape = CollisionShape3D.new()
 	collision_shape.shape = capsule
-	collision_shape.position = Vector3(0, 0.9, 0)
+	collision_shape.position = Vector3(0, 0.88, 0)
 	add_child(collision_shape)
 	floor_max_angle = deg_to_rad(46.0)
 	floor_snap_length = 0.35
@@ -177,7 +180,9 @@ func _physics_process(delta: float) -> void:
 	if not alive:
 		velocity.y -= GRAVITY * delta
 		if is_on_floor():
-			velocity = Vector3.ZERO
+			velocity.y = minf(velocity.y, -0.4)
+			velocity.x = move_toward(velocity.x, 0.0, 13.5 * delta)
+			velocity.z = move_toward(velocity.z, 0.0, 13.5 * delta)
 		move_and_slide()
 		_dead_timer += delta
 		return
@@ -228,7 +233,27 @@ func _apply_movement(delta: float) -> void:
 	var wish := Vector3(wish_dir.x, 0, wish_dir.y)
 	if wish.length() > 1.0:
 		wish = wish.normalized()
-	if is_on_floor():
+	if ladder_contacts > 0:
+		# Escalada autentica en func_ladder de mapas .bsp (de_nuke, de_train, cs_assault).
+		velocity.x = wish.x * target_speed * 0.72
+		velocity.z = wish.z * target_speed * 0.72
+		var look_y := get_fire_direction().y
+		if want_jump:
+			velocity.y = 4.6
+			want_jump = false
+		elif want_crouch:
+			velocity.y = -4.2
+		elif wish.length() > 0.12:
+			velocity.y = 4.3 if look_y >= -0.32 else -4.0
+		else:
+			velocity.y = 0.0
+		_ladder_sfx_t -= delta
+		if absf(velocity.y) > 1.0 and _ladder_sfx_t <= 0.0:
+			_ladder_sfx_t = 0.36
+			AudioBank.play_at(
+				"ladder_step", self, global_position, -7.0, _rng.randf_range(0.95, 1.08), 16.0
+			)
+	elif is_on_floor():
 		if wish.length() > 0.05:
 			var accel := 11.0 if not crouching else 8.0
 			velocity.x = move_toward(
@@ -260,11 +285,14 @@ func _apply_movement(delta: float) -> void:
 			velocity.z = move_toward(velocity.z, wish.z * target_speed, 2.2 * delta * target_speed)
 		velocity.y -= GRAVITY * delta
 		want_jump = false
-	# Crouch: agacha el cuerpo.
-	var target_crouch := want_crouch and is_on_floor()
-	if crouching != target_crouch:
+	# Crouch compatible con ductos/ventilaciones de 36 unidades GoldSrc (0.90 m).
+	var target_crouch := want_crouch
+	if not target_crouch and crouching and not is_zombie:
+		if test_move(global_transform, Vector3(0.0, 0.88, 0.0)):
+			target_crouch = true
+	if crouching != target_crouch and not is_zombie:
 		crouching = target_crouch
-		capsule.height = 1.8 if not crouching else 1.15
+		capsule.height = 1.76 if not crouching else 0.86
 		collision_shape.position.y = capsule.height * 0.5
 	# Paso automatico (solo escalones reales, nunca en suelo plano).
 	velocity = velocity.limit_length(30.0)
@@ -811,14 +839,14 @@ func _hitscan(origin: Vector3, dir: Vector3, def: Dictionary, _primary: bool) ->
 	var travelled := 0.0
 	var pierced := 0
 	var seg := 0
-	while seg < 3 and remaining > 0.2:
+	var excl: Array[RID] = [get_rid()]
+	while seg < 4 and remaining > 0.2:
 		seg += 1
 		var query := PhysicsRayQueryParameters3D.new()
 		query.from = from
 		query.to = from + dir * remaining
-		query.collision_mask = 1 | PLAYER_LAYER
+		query.collision_mask = 1 | PLAYER_LAYER | PhysicsProp.PROP_LAYER
 		query.collide_with_bodies = true
-		var excl: Array[RID] = [get_rid()]
 		query.exclude = excl
 		var hit := space.intersect_ray(query)
 		if hit.is_empty():
@@ -827,6 +855,28 @@ func _hitscan(origin: Vector3, dir: Vector3, def: Dictionary, _primary: bool) ->
 		var point: Vector3 = hit.position
 		var normal: Vector3 = hit.normal
 		var dist := travelled + from.distance_to(point)
+		if collider is PhysicsProp:
+			var prop := collider as PhysicsProp
+			var p_dmg: float = float(def.get("damage", 24.0))
+			Fx.impact(get_parent(), point, normal, prop.surface_type)
+			excl.append(prop.get_rid())
+			prop.apply_bullet_hit(point, dir, p_dmg)
+			travelled = dist
+			remaining -= from.distance_to(point) + 0.1
+			from = point + dir * 0.05
+			continue
+		if collider is StaticBody3D and (collider as StaticBody3D).has_meta("breakable_hp"):
+			var b_sb := collider as StaticBody3D
+			var b_dmg: float = float(def.get("damage", 24.0))
+			Fx.impact(get_parent(), point, normal, _surface_kind(b_sb))
+			excl.append(b_sb.get_rid())
+			var shattered := BspLoader.damage_breakable(b_sb, b_dmg)
+			if shattered:
+				travelled = dist
+				remaining -= from.distance_to(point) + 0.08
+				from = point + dir * 0.05
+				continue
+			return
 		if collider is Combatant:
 			var victim := collider as Combatant
 			if victim == self:
@@ -946,6 +996,11 @@ func take_damage(
 	health -= dmg
 	last_damage_time = _now()
 	last_attacker = attacker
+	if attacker is Node3D and weapon_id != "molotov":
+		var push := global_position - (attacker as Node3D).global_position
+		push.y = 0.0
+		if push.length_squared() > 0.01:
+			_death_knockback = push.normalized() * clampf(dmg * 0.065, 1.5, 6.2)
 	health_changed.emit(self, health, armor)
 	damaged.emit(self, dmg, attacker, hitbox, weapon_id)
 	if health > 0.0 and _now() - _last_pain_sfx > 0.65:
@@ -968,7 +1023,7 @@ func die(attacker: Node, weapon_id: String, headshot: bool, wallbang: bool = fal
 	armor = 0.0
 	helmet = false
 	deaths += 1
-	velocity = Vector3.ZERO
+	velocity = _death_knockback + Vector3(0.0, 1.4 if headshot else 0.65, 0.0)
 	collision_layer = 0
 	collision_mask = 1
 	wants_fire = false
@@ -1015,14 +1070,30 @@ func _drop_weapon() -> void:
 		return
 	if game and game.has_method("spawn_pickup"):
 		var a: Vector2i = ammo.get(primary_id, Vector2i(0, 0))
+		var drop_vel := (
+			_death_knockback * 0.65
+			+ Vector3(_rng.randf_range(-1.6, 1.6), 3.1, _rng.randf_range(-1.6, 1.6))
+		)
 		game.call(
-			"spawn_pickup", primary_id, global_position + Vector3(0, 0.3, 0), primary_id, a.x, a.y
+			"spawn_pickup",
+			primary_id,
+			global_position + Vector3(0, 0.85, 0),
+			primary_id,
+			a.x,
+			a.y,
+			drop_vel
 		)
 
 
 func respawn(pos: Vector3, health_amount: float = -1.0) -> void:
 	alive = true
 	frozen = false
+	ladder_contacts = 0
+	_death_knockback = Vector3.ZERO
+	crouching = false
+	if not is_zombie:
+		capsule.height = 1.76
+		collision_shape.position.y = 0.88
 	health = max_health if health_amount < 0.0 else minf(health_amount, max_health)
 	collision_layer = PLAYER_LAYER
 	collision_mask = 1 | PLAYER_LAYER
@@ -1102,13 +1173,23 @@ func _melee_attack(heavy: bool = false) -> void:
 		var query := PhysicsRayQueryParameters3D.new()
 		query.from = origin
 		query.to = origin + dir * reach
-		query.collision_mask = 1 | PLAYER_LAYER
+		query.collision_mask = 1 | PLAYER_LAYER | PhysicsProp.PROP_LAYER
 		var excl: Array[RID] = [get_rid()]
 		query.exclude = excl
 		var hit := space.intersect_ray(query)
 		if hit.is_empty():
 			continue
 		var collider = hit.collider
+		if collider is PhysicsProp:
+			var k_prop := collider as PhysicsProp
+			Fx.impact(get_parent(), hit.position, hit.normal, k_prop.surface_type)
+			k_prop.apply_bullet_hit(hit.position, dir, 58.0 if heavy else 32.0)
+			_on_melee_attacked(true, heavy)
+			return
+		if collider is StaticBody3D and (collider as StaticBody3D).has_meta("breakable_hp"):
+			BspLoader.damage_breakable(collider as StaticBody3D, 68.0 if heavy else 38.0)
+			_on_melee_attacked(true, heavy)
+			return
 		if collider is Combatant:
 			var victim := collider as Combatant
 			if victim == self:
@@ -1158,8 +1239,13 @@ func _throw_grenade() -> void:
 	var dir := get_fire_direction()
 	grenades.remove_at(current_grenade)
 	if grenades.is_empty():
-		current_slot = Content.SLOT_KNIFE
-		current_id = "knife"
+		var fallback_slot := (
+			Content.SLOT_PRIMARY
+			if primary_id != ""
+			else (Content.SLOT_SECONDARY if secondary_id != "" else Content.SLOT_KNIFE)
+		)
+		current_id = ""
+		select_slot(fallback_slot)
 	else:
 		current_grenade = mini(current_grenade, grenades.size() - 1)
 		current_id = grenades[current_grenade]
