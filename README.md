@@ -55,6 +55,23 @@ Todos los sonidos se sintetizan por DSP al arrancar: 16 familias de disparos con
 
 ---
 
+## 1.1 Descargar el proyecto
+
+Cada actualización se publica como *release* con el zip listo para abrir en Godot:
+
+- **Última versión (zip):** https://github.com/ShadowNigth/Papita/releases/latest
+- **Rama de desarrollo (zip):** https://github.com/ShadowNigth/Papita/archive/refs/heads/arena/9025a588-papita.zip
+
+Para generar el zip tú mismo:
+
+```bash
+tools/package.sh            # deja el archivo en /home/user/releases/
+```
+
+El zip contiene el proyecto completo (código, shaders, fuentes, docs y herramientas); no incluye `.git`, `.godot` ni el propio zip.
+
+---
+
 ## 2. Cómo ejecutarlo
 
 ### Requisitos
