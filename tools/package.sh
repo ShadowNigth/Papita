@@ -4,7 +4,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="${1:-1.0.1}"
+VERSION="${1:-1.0.2}"
 OUT_DIR="${OUT_DIR:-/home/user/releases}"
 NAME="Papita-CS15-Reforged-v${VERSION}"
 mkdir -p "$OUT_DIR"

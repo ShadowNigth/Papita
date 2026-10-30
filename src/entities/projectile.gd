@@ -30,7 +30,7 @@ func _ready() -> void:
 	sphere.radius = 0.09
 	shape.shape = sphere
 	add_child(shape)
-	var mat := PhysicalMaterial.new()
+	var mat := PhysicsMaterial.new()
 	mat.bounce = 0.45
 	mat.friction = 0.7
 	physics_material_override = mat

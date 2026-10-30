@@ -675,7 +675,8 @@ func _hitscan(origin: Vector3, dir: Vector3, def: Dictionary, _primary: bool) ->
 		query.to = from + dir * remaining
 		query.collision_mask = 1 | PLAYER_LAYER
 		query.collide_with_bodies = true
-		query.exclude = [get_rid()]
+		var excl: Array[RID] = [get_rid()]
+		query.exclude = excl
 		var hit := space.intersect_ray(query)
 		if hit.is_empty():
 			return
@@ -712,7 +713,7 @@ func _hitscan(origin: Vector3, dir: Vector3, def: Dictionary, _primary: bool) ->
 		exit_query.from = point + dir * 0.06
 		exit_query.to = point + dir * (0.18 + penetration * 0.22)
 		exit_query.collision_mask = 1
-		exit_query.exclude = [get_rid()]
+		exit_query.exclude = excl
 		var exit_hit := space.intersect_ray(exit_query)
 		if exit_hit.is_empty():
 			return
@@ -846,7 +847,9 @@ func _drop_weapon() -> void:
 	var game := get_tree().get_first_node_in_group("game")
 	if game and game.has_method("spawn_pickup"):
 		var a: Vector2i = ammo.get(primary_id, Vector2i(0, 0))
-		game.spawn_pickup(primary_id, global_position + Vector3(0, 0.3, 0), primary_id, a.x, a.y)
+		game.call(
+			"spawn_pickup", primary_id, global_position + Vector3(0, 0.3, 0), primary_id, a.x, a.y
+		)
 
 
 func respawn(pos: Vector3, health_amount: float = -1.0) -> void:
@@ -914,7 +917,8 @@ func _melee_attack() -> void:
 		query.from = origin
 		query.to = origin + dir * 2.0
 		query.collision_mask = 1 | PLAYER_LAYER
-		query.exclude = [get_rid()]
+		var excl: Array[RID] = [get_rid()]
+		query.exclude = excl
 		var hit := space.intersect_ray(query)
 		if hit.is_empty():
 			continue
@@ -955,7 +959,7 @@ func _throw_grenade() -> void:
 	next_fire_time = _now() + 0.9
 	var game := get_tree().get_first_node_in_group("game")
 	if game and game.has_method("spawn_grenade"):
-		game.spawn_grenade(self, id, origin + dir * 0.4, dir * 17.0 + Vector3(0, 3.0, 0))
+		game.call("spawn_grenade", self, id, origin + dir * 0.4, dir * 17.0 + Vector3(0, 3.0, 0))
 	AudioBank.play_at(
 		"grenade_throw", get_parent(), origin, -4.0, _rng.randf_range(0.95, 1.05), 25.0
 	)

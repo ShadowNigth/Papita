@@ -26,7 +26,7 @@ def type_of_node(node, classes):
 
 
 def is_decl(r):
-    return r is not None and ('var' in r or r in ('for_stmt', 'for_bare_stmt'))
+    return r is not None and ('var' in r or r in ('for_stmt', 'for_stmt_typed', 'for_bare_stmt'))
 
 ENGINE_MEMBERS = set("""position rotation rotation_degrees quaternion scale transform
 global_position global_rotation global_rotation_degrees global_scale global_transform basis

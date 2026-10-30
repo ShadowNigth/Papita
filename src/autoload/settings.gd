@@ -113,8 +113,10 @@ func _notification(what: int) -> void:
 
 
 func _on_node_added(node: Node) -> void:
-	if node is WorldEnvironment and node.environment != null:
-		apply_environment(node.environment)
+	if node is WorldEnvironment:
+		var we := node as WorldEnvironment
+		if we.environment != null:
+			apply_environment(we.environment)
 
 
 # --- API publica ---------------------------------------------------------------

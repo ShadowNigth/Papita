@@ -55,9 +55,7 @@ static func _ensure_assets() -> void:
 	_hole_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 
 
-static func _particles(
-	parent: Node3D, count: int, lifetime: float, tex: Texture2D
-) -> CPUParticles3D:
+static func _particles(parent: Node, count: int, lifetime: float, tex: Texture2D) -> CPUParticles3D:
 	var p := CPUParticles3D.new()
 	p.amount = count
 	p.lifetime = lifetime
@@ -80,7 +78,7 @@ static func _particles(
 	return p
 
 
-static func tracer(parent: Node3D, from: Vector3, to: Vector3) -> void:
+static func tracer(parent: Node, from: Vector3, to: Vector3) -> void:
 	if parent == null or not is_instance_valid(parent):
 		return
 	_ensure_assets()
@@ -101,9 +99,7 @@ static func tracer(parent: Node3D, from: Vector3, to: Vector3) -> void:
 	tw.tween_callback(mi.queue_free)
 
 
-static func impact(
-	parent: Node3D, pos: Vector3, normal: Vector3, kind: String = "concrete"
-) -> void:
+static func impact(parent: Node, pos: Vector3, normal: Vector3, kind: String = "concrete") -> void:
 	if parent == null or not is_instance_valid(parent):
 		return
 	_ensure_assets()
@@ -156,7 +152,7 @@ static func impact(
 	timer.timeout.connect(root.queue_free)
 
 
-static func blood(parent: Node3D, pos: Vector3, dir: Vector3, amount: int = 14) -> void:
+static func blood(parent: Node, pos: Vector3, dir: Vector3, amount: int = 14) -> void:
 	if parent == null or not is_instance_valid(parent):
 		return
 	_ensure_assets()
@@ -182,7 +178,7 @@ static func blood(parent: Node3D, pos: Vector3, dir: Vector3, amount: int = 14) 
 	timer.timeout.connect(root.queue_free)
 
 
-static func muzzle(parent: Node3D, pos: Vector3, dir: Vector3) -> void:
+static func muzzle(parent: Node, pos: Vector3, dir: Vector3) -> void:
 	if parent == null or not is_instance_valid(parent):
 		return
 	_ensure_assets()
@@ -209,7 +205,7 @@ static func muzzle(parent: Node3D, pos: Vector3, dir: Vector3) -> void:
 	tw.tween_callback(root.queue_free)
 
 
-static func shell_eject(parent: Node3D, pos: Vector3) -> void:
+static func shell_eject(parent: Node, pos: Vector3) -> void:
 	if parent == null or not is_instance_valid(parent):
 		return
 	var mi := MeshInstance3D.new()
@@ -225,7 +221,7 @@ static func shell_eject(parent: Node3D, pos: Vector3) -> void:
 	tw.tween_callback(mi.queue_free)
 
 
-static func explosion(parent: Node3D, pos: Vector3, big: bool = true) -> void:
+static func explosion(parent: Node, pos: Vector3, big: bool = true) -> void:
 	if parent == null or not is_instance_valid(parent):
 		return
 	_ensure_assets()
@@ -265,7 +261,7 @@ static func explosion(parent: Node3D, pos: Vector3, big: bool = true) -> void:
 	AudioBank.play_at("explosion", root, Vector3.ZERO, 4.0, randf_range(0.92, 1.05), 160.0)
 
 
-static func smoke_cloud(parent: Node3D, pos: Vector3, radius: float = 4.0) -> void:
+static func smoke_cloud(parent: Node, pos: Vector3, radius: float = 4.0) -> void:
 	if parent == null or not is_instance_valid(parent):
 		return
 	_ensure_assets()
@@ -290,7 +286,7 @@ static func smoke_cloud(parent: Node3D, pos: Vector3, radius: float = 4.0) -> vo
 	timer.timeout.connect(root.queue_free)
 
 
-static func flash(parent: Node3D, pos: Vector3) -> void:
+static func flash(parent: Node, pos: Vector3) -> void:
 	if parent == null or not is_instance_valid(parent):
 		return
 	_ensure_assets()

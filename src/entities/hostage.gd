@@ -7,7 +7,6 @@ var following: Combatant = null
 var rescued := false
 var follow_offset := Vector3.ZERO
 var _think := 0.0
-var _rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:

@@ -478,7 +478,7 @@ func _start_rebind(action: String, button: Button) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _rebind_action == "":
 		return
-	if event is InputEventKey and event.pressed:
+	if event is InputEventKey and event.is_pressed():
 		var key_event := event as InputEventKey
 		if key_event.physical_keycode == KEY_ESCAPE:
 			_rebind_action = ""

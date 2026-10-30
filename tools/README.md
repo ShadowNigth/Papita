@@ -13,6 +13,7 @@ python3 -m venv .venv-gdt
 ## Uso (desde la raíz del proyecto)
 
 ```bash
+.venv-gdt/bin/python tools/check_godot44.py      # analizador completo contra extension_api.json de Godot 4.4
 .venv-gdt/bin/python tools/check_scope.py        # identificadores usados fuera de su ámbito
 .venv-gdt/bin/python tools/check_members.py      # miembros/métodos que no existen en el tipo
 .venv-gdt/bin/python tools/check_weak_types.py   # métodos de proyecto sobre vars tipadas Node

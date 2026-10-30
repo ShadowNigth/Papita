@@ -356,7 +356,7 @@ func _leave_match() -> void:
 	Settings.flush()
 	var app := get_tree().root.get_node_or_null("App")
 	if app and app.has_method("goto_menu"):
-		app.goto_menu()
+		app.call("goto_menu")
 
 
 # --- Marcador ------------------------------------------------------------------
@@ -605,7 +605,7 @@ func show_match_end(won: bool, score_ct: int, score_t: int) -> void:
 			get_tree().paused = false
 			var app := get_tree().root.get_node_or_null("App")
 			if app and app.has_method("restart_match"):
-				app.restart_match()
+				app.call("restart_match")
 	)
 	vb.add_child(again)
 	var leave := UITheme.button("VOLVER AL MENU", 0, 17)
@@ -642,7 +642,7 @@ func show_zombie_gameover(wave: int, kills: int) -> void:
 			get_tree().paused = false
 			var app := get_tree().root.get_node_or_null("App")
 			if app and app.has_method("restart_match"):
-				app.restart_match()
+				app.call("restart_match")
 	)
 	vb.add_child(again)
 	var leave := UITheme.button("VOLVER AL MENU", 0, 17)
@@ -704,7 +704,7 @@ func _on_console_command(text: String) -> void:
 		return
 	_console_log.append_text("[color=#6b8f5a]> %s[/color]\n" % text)
 	var cmd := String(parts[0]).to_lower()
-	var args := parts.slice(1)
+	var args := Array(parts.slice(1))
 	var out := _run_command(cmd, args)
 	if out != "":
 		_console_log.append_text(out + "\n")
@@ -771,10 +771,12 @@ func _run_command(cmd: String, args: Array) -> String:
 			return "Oleada limpiada"
 		"map":
 			if args.is_empty():
-				return "Mapas: " + ", ".join(Content.MAPS.map(func(m): return m.id))
+				var map_ids := PackedStringArray(Content.MAPS.map(func(m): return m.id))
+				return "Mapas: " + ", ".join(map_ids)
 			var app := get_tree().root.get_node_or_null("App")
 			if app and app.has_method("start_match"):
-				app.start_match(
+				app.call(
+					"start_match",
 					String(args[0]),
 					game.mode,
 					game.player_team,
@@ -961,11 +963,8 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event.is_action_released("scoreboard"):
 		_on_scoreboard(false)
-	if (
-		console_open
-		and event is InputEventKey
-		and event.pressed
-		and event.physical_keycode == KEY_ESCAPE
-	):
-		toggle_console()
-		get_viewport().set_input_as_handled()
+	if console_open and event is InputEventKey:
+		var ke := event as InputEventKey
+		if ke.pressed and ke.physical_keycode == KEY_ESCAPE:
+			toggle_console()
+			get_viewport().set_input_as_handled()

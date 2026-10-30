@@ -425,19 +425,18 @@ static func zombie_prop(theme: String, variant: int) -> Node3D:
 	return root
 
 
-static func blood_decal(parent: Node3D, pos: Vector3, normal: Vector3, size: float = 2.0) -> void:
+static func blood_decal(parent: Node, pos: Vector3, normal: Vector3, size: float = 2.0) -> void:
 	var decal := Decal.new()
 	decal.size = Vector3(size, 1.0, size)
 	decal.albedo_mix = 0.9
 	var tex := MaterialLib.radial_texture(1.2, 64)
-	var mat := StandardMaterial3D.new()
-	mat.albedo_texture = tex
-	mat.albedo_color = Color(0.3, 0.02, 0.02, 0.85)
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	decal.texture_albedo = tex
 	decal.modulate = Color(0.28, 0.02, 0.02, 0.9)
 	decal.position = pos
-	decal.normal = normal
+	if normal.length_squared() > 0.001:
+		var n := normal.normalized()
+		var up := Vector3.FORWARD if absf(n.dot(Vector3.UP)) > 0.98 else Vector3.UP
+		var x_axis := up.cross(n).normalized()
+		var z_axis := n.cross(x_axis).normalized()
+		decal.basis = Basis(x_axis, n, z_axis)
 	parent.add_child(decal)

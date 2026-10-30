@@ -94,13 +94,15 @@ func _on_settings_changed(section: String) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not alive:
-		if event is InputEventMouseButton and event.pressed:
+		if event is InputEventMouseButton and event.is_pressed():
 			pass
 		return
 	if event is InputEventMouseMotion and input_enabled:
-		_look(event.relative)
-	if event is InputEventMouseButton and event.pressed and input_enabled:
-		match event.button_index:
+		var mm := event as InputEventMouseMotion
+		_look(mm.relative)
+	if event is InputEventMouseButton and event.is_pressed() and input_enabled:
+		var mb := event as InputEventMouseButton
+		match mb.button_index:
 			MOUSE_BUTTON_WHEEL_DOWN:
 				cycle_weapon(1)
 			MOUSE_BUTTON_WHEEL_UP:
@@ -251,17 +253,17 @@ func _gather_input(_delta: float) -> void:
 		_use_hold += _delta_safe()
 		var game := get_tree().get_first_node_in_group("game")
 		if game and game.has_method("interact_hold"):
-			game.interact_hold(self, _use_hold)
+			game.call("interact_hold", self, _use_hold)
 	else:
 		if _use_hold > 0.0:
 			var game := get_tree().get_first_node_in_group("game")
 			if game and game.has_method("interact_release"):
-				game.interact_release(self)
+				game.call("interact_release", self)
 		_use_hold = 0.0
 	if Input.is_action_just_pressed("use"):
 		var game := get_tree().get_first_node_in_group("game")
 		if game and game.has_method("interact_press"):
-			game.interact_press(self)
+			game.call("interact_press", self)
 
 
 func _delta_safe() -> float:
@@ -327,8 +329,13 @@ func _drop_current() -> void:
 		secondary_id = ""
 	var game := get_tree().get_first_node_in_group("game")
 	if game and game.has_method("spawn_pickup"):
-		game.spawn_pickup(
-			id, global_position + get_fire_direction() * 1.2 + Vector3(0, 0.3, 0), id, a.x, a.y
+		game.call(
+			"spawn_pickup",
+			id,
+			global_position + get_fire_direction() * 1.2 + Vector3(0, 0.3, 0),
+			id,
+			a.x,
+			a.y
 		)
 	current_id = ""
 	current_slot = Content.SLOT_KNIFE

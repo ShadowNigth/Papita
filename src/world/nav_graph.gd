@@ -137,7 +137,7 @@ func find_path(from: Vector3, to: Vector3) -> PackedVector3Array:
 		closed[current] = 1
 		var cx := current % cols
 		var cz := int(current / cols)
-		for dir in [
+		for dir: Vector2i in [
 			Vector2i(1, 0),
 			Vector2i(-1, 0),
 			Vector2i(0, 1),
@@ -291,4 +291,4 @@ func random_point_near(center: Vector3, radius: float, rng: RandomNumberGenerato
 		var c := cell_from_world(p)
 		if is_walkable(c):
 			return world_from_cell(c)
-	return nearest_walkable(cell_from_world(center))
+	return world_from_cell(nearest_walkable(cell_from_world(center)))

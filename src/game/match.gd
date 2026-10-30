@@ -727,7 +727,8 @@ func _update_interaction() -> void:
 func interaction_hint_for(p: Player) -> String:
 	if mode == "zombie":
 		for node in get_tree().get_nodes_in_group("perk_machine"):
-			if node.global_position.distance_to(p.global_position) < 2.4:
+			var n3 := node as Node3D
+			if n3 and n3.global_position.distance_to(p.global_position) < 2.4:
 				var id := String(node.get_meta("perk_id", ""))
 				var price := int(Content.PERK_PRICES.get(id, 0))
 				var owned := p.has_meta("perk_" + id)
@@ -735,10 +736,12 @@ func interaction_hint_for(p: Player) -> String:
 					return "%s YA COMPRADO" % Content.PERKS[id].name.to_upper()
 				return "[E] COMPRAR %s ($%d)" % [Content.PERKS[id].name.to_upper(), price]
 		for node in get_tree().get_nodes_in_group("mystery_box"):
-			if node.global_position.distance_to(p.global_position) < 2.4:
+			var n3 := node as Node3D
+			if n3 and n3.global_position.distance_to(p.global_position) < 2.4:
 				return "[E] CAJA MISTERIOSA ($%d)" % Content.MYSTERY_BOX_PRICE
 		for node in get_tree().get_nodes_in_group("ammo_crate"):
-			if node.global_position.distance_to(p.global_position) < 2.4:
+			var n3 := node as Node3D
+			if n3 and n3.global_position.distance_to(p.global_position) < 2.4:
 				return "[E] MUNICION ($%d)" % Content.ZOMBIE_AMMO_PRICE
 		return ""
 	if mode == "hostage" and p.team == Content.TEAM_CT:
@@ -814,16 +817,19 @@ func interact_release(p: Player) -> void:
 
 func _try_zombie_purchase(p: Player) -> void:
 	for node in get_tree().get_nodes_in_group("perk_machine"):
-		if node.global_position.distance_to(p.global_position) < 2.4:
+		var n3 := node as Node3D
+		if n3 and n3.global_position.distance_to(p.global_position) < 2.4:
 			var id := String(node.get_meta("perk_id", ""))
 			buy_perk(id, p)
 			return
 	for node in get_tree().get_nodes_in_group("mystery_box"):
-		if node.global_position.distance_to(p.global_position) < 2.4:
+		var n3 := node as Node3D
+		if n3 and n3.global_position.distance_to(p.global_position) < 2.4:
 			buy_mystery_box(p)
 			return
 	for node in get_tree().get_nodes_in_group("ammo_crate"):
-		if node.global_position.distance_to(p.global_position) < 2.4:
+		var n3 := node as Node3D
+		if n3 and n3.global_position.distance_to(p.global_position) < 2.4:
 			buy_ammo(p)
 			return
 
@@ -960,7 +966,8 @@ func explode(
 		q.from = center
 		q.to = c.global_position + Vector3(0, 1.0, 0)
 		q.collision_mask = 1
-		q.exclude = [c.get_rid()]
+		var excl: Array[RID] = [c.get_rid()]
+		q.exclude = excl
 		var hit := space.intersect_ray(q)
 		if not hit.is_empty():
 			continue
@@ -983,7 +990,8 @@ func flash_at(pos: Vector3, attacker: Node) -> void:
 		q.from = pos
 		q.to = c.global_position + Vector3(0, 1.2, 0)
 		q.collision_mask = 1
-		q.exclude = [c.get_rid()]
+		var excl: Array[RID] = [c.get_rid()]
+		q.exclude = excl
 		var hit := space.intersect_ray(q)
 		if not hit.is_empty():
 			continue

@@ -59,9 +59,9 @@ Todos los sonidos se sintetizan por DSP al arrancar: 16 familias de disparos con
 
 **Descarga directa del zip (última versión):**
 
-> ### ⬇️ https://github.com/ShadowNigth/Papita/archive/refs/tags/v1.0.1.zip
+> ### ⬇️ https://github.com/ShadowNigth/Papita/archive/refs/tags/v1.0.2.zip
 
-- Página de la release: https://github.com/ShadowNigth/Papita/releases/tag/v1.0.1
+- Página de la release: https://github.com/ShadowNigth/Papita/releases/tag/v1.0.2
 - Último estado de la rama de desarrollo (zip): https://github.com/ShadowNigth/Papita/archive/refs/heads/arena/9025a588-papita.zip
 
 El zip contiene el proyecto completo (código, shaders, fuentes, docs y herramientas). No incluye `.git` ni `.godot`.

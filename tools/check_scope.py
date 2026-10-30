@@ -30,7 +30,7 @@ def is_decl_rule(r):
         return False
     if r.startswith(('class_var', 'func_var', 'var')) or 'var' in r:
         return True
-    return r in ('for_stmt', 'for_bare_stmt')
+    return r in ('for_stmt', 'for_stmt_typed', 'for_bare_stmt')
 
 def class_members(tree):
     """Solo miembros de nivel de clase: hijos directos del nodo start."""
@@ -161,7 +161,7 @@ PhysicsShapeQueryParameters3D PhysicsDirectSpaceState3D PhysicsServer3D Renderin
 AudioServer DisplayServer OS Engine Time Input InputMap FileAccess DirAccess ConfigFile
 JSON ResourceLoader Thread Mutex Callable Signal RID StringName NodePath Rect2i Vector2i
 Vector3i Threading GeoNode TweenProperty BoxContainer CheckButton GeometryInstance3D
-InputEventKey InputEventMouseButton Marker3D PhysicalMaterial Sprite3D TabContainer
+InputEventKey InputEventMouseButton Marker3D PhysicsMaterial Sprite3D TabContainer
 TextServer TranslationServer AudioEffectInstance SceneState ViewportTexture StyleBoxTexture
 SpriteBase3D RenderMode CollisionObject3D VisualInstance3D GeometryInstance3D""".split())
 

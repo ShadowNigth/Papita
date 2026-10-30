@@ -203,7 +203,7 @@ func _build_environment() -> void:
 
 
 func _build_ground() -> void:
-	var half := data.bounds.size.x * 0.5 + 20.0
+	var half: float = float(data.bounds.size.x) * 0.5 + 20.0
 	var mesh := BoxMesh.new()
 	mesh.size = Vector3(half * 2.0, 1.0, half * 2.0)
 	var mi := MeshInstance3D.new()

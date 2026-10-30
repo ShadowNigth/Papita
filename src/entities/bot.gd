@@ -41,7 +41,6 @@ var attack_cooldown := 0.0
 var has_planted := false
 var defusing := false
 var patrol_point := Vector3.ZERO
-var _rng := RandomNumberGenerator.new()
 var _last_state := ""
 
 
@@ -195,7 +194,8 @@ func _find_visible_enemy() -> Combatant:
 		query.from = eye
 		query.to = to
 		query.collision_mask = 1
-		query.exclude = [get_rid()]
+		var excl: Array[RID] = [get_rid()]
+		query.exclude = excl
 		var hit := space.intersect_ray(query)
 		if not hit.is_empty():
 			continue
@@ -206,11 +206,11 @@ func _find_visible_enemy() -> Combatant:
 	return best
 
 
-func _enemies() -> Array:
-	var out: Array = []
+func _enemies() -> Array[Combatant]:
+	var out: Array[Combatant] = []
 	if game == null:
 		return out
-	for c in game.get("all_combatants"):
+	for c: Combatant in game.get("all_combatants"):
 		if not is_instance_valid(c) or not c.alive or c == self:
 			continue
 		if c.is_hostage:
@@ -351,7 +351,7 @@ func _move_towards(point: Vector3) -> void:
 	var dir := flat.normalized()
 	# Separacion simple de otros bots.
 	if game:
-		for other in game.get("all_combatants"):
+		for other: Combatant in game.get("all_combatants"):
 			if other == self or not is_instance_valid(other) or not other.alive:
 				continue
 			if not other.is_zombie and is_zombie:
@@ -439,7 +439,8 @@ func _friendly_in_line() -> bool:
 	query.from = from
 	query.to = to
 	query.collision_mask = PLAYER_LAYER
-	query.exclude = [get_rid()]
+	var excl: Array[RID] = [get_rid()]
+	query.exclude = excl
 	var hit := space.intersect_ray(query)
 	if hit.is_empty():
 		return false
@@ -609,8 +610,9 @@ func hear_noise(origin: Vector3, loudness: float) -> void:
 
 func report_damage(attacker: Node) -> void:
 	if attacker is Combatant:
-		target_enemy = attacker as Combatant
-		last_seen_pos = attacker.global_position
+		var c := attacker as Combatant
+		target_enemy = c
+		last_seen_pos = c.global_position
 		last_seen_time = _now()
 		aim_point = last_seen_pos + Vector3(0, 1.2, 0)
 		reaction_left = float(difficulty.get("reaction", 0.3))
