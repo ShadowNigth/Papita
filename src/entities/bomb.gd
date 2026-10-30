@@ -88,8 +88,8 @@ func _process(delta: float) -> void:
 	var urgency := clampf(1.0 - time_left / FUSE_TIME, 0.0, 1.0)
 	_beep_timer -= delta
 	if _beep_timer <= 0.0:
-		_beep_timer = lerpf(1.0, 0.09, urgency)
-		AudioBank.play_at("beep", self, global_position, 0.0, 1.0 + urgency * 0.8, 60.0)
+		_beep_timer = lerpf(1.0, 0.14, urgency)
+		AudioBank.c4_beep(urgency, self, global_position)
 		if _light:
 			_light.light_energy = 2.2
 	if _light:
@@ -114,6 +114,8 @@ func _process(delta: float) -> void:
 func begin_defuse(combatant: Combatant) -> void:
 	if not planted:
 		return
+	if defusing_by != combatant:
+		AudioBank.play_at("defuse_start", self, global_position, 0.0, 1.0, 35.0)
 	defusing_by = combatant
 
 

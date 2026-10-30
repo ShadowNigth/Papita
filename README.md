@@ -2,7 +2,7 @@
 
 Recreación jugable y **completa** del clásico *Counter-Strike 1.5*, hecha desde cero en **Godot 4.4** como proyecto personal (sin distribución pública).
 
-> **Modelos 3D originales de Counter-Strike 1.5 (`assets/models/cs15/*.mdl`)**: integra los 96 modelos StudioModel v10 originales de CS 1.5 (`v_*`, `p_*`, `w_*`, las 8 facciones CT/T, VIP, rehén y esqueleto) cargados de forma nativa en memoria y cacheados en GPU mediante `src/world/mdl_loader.gd`, junto con mapas, texturas PBR y audio DSP procedurales.
+> **Modelos 3D y sonidos originales de Counter-Strike 1.5 (`assets/models/cs15/*.mdl` + `assets/sounds/cs15/**/*.wav`)**: integra los 96 modelos StudioModel v10 originales de CS 1.5 y los 340 efectos de sonido originales de CS 1.5 / Half-Life 1 (disparos individuales por arma, recargas, cuchillo, pasos, impactos, C4, granadas, rehenes, radio, voces de ronda e interfaz), manteniendo la música 100 % procedural en `Synth` (sin música original).
 
 ---
 
@@ -57,11 +57,11 @@ Todos los sonidos se sintetizan por DSP al arrancar: 16 familias de disparos con
 
 ## 1.1 Descargar el proyecto
 
-**Descarga directa del zip (última versión `v1.0.4`):**
+**Descarga directa del zip (última versión `v1.0.5`):**
 
-> ### ⬇️ https://github.com/ShadowNigth/Papita/archive/refs/tags/v1.0.4.zip
+> ### ⬇️ https://github.com/ShadowNigth/Papita/archive/refs/tags/v1.0.5.zip
 
-- Página de la release: https://github.com/ShadowNigth/Papita/releases/tag/v1.0.4
+- Página de la release: https://github.com/ShadowNigth/Papita/releases/tag/v1.0.5
 - Último estado de la rama de desarrollo (zip): https://github.com/ShadowNigth/Papita/archive/refs/heads/arena/9025a588-papita.zip
 
 El zip contiene el proyecto completo (código, shaders, fuentes, docs y herramientas). No incluye `.git` ni `.godot`.

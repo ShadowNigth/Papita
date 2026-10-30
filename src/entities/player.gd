@@ -146,7 +146,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_drop_current()
 	elif event.is_action_pressed("flashlight"):
 		flashlight.visible = not flashlight.visible
-		AudioBank.play_2d("ui_click", -12.0)
+		AudioBank.play_2d("flashlight", -5.0)
 	elif event.is_action_pressed("inspect"):
 		if viewmodel:
 			viewmodel.inspect()
@@ -366,6 +366,7 @@ func _drop_current() -> void:
 			a.x,
 			a.y
 		)
+	AudioBank.play_2d("weapon_drop", -5.0)
 	current_id = ""
 	current_slot = Content.SLOT_KNIFE
 	select_slot(Content.SLOT_KNIFE)

@@ -59,6 +59,7 @@ func _on_body_entered(body: Node) -> void:
 	elif slot == Content.SLOT_PRIMARY:
 		if c.primary_id == weapon_id:
 			c._set_ammo(weapon_id, mini(int(def.mag), mag + c.current_ammo().x), reserve)
+			AudioBank.play_at("ammo", c, global_position, -4.0, 1.0, 16.0)
 			_consume()
 			return
 		c.give_weapon(weapon_id, c.primary_id == "")
@@ -66,7 +67,7 @@ func _on_body_entered(body: Node) -> void:
 	elif slot == Content.SLOT_SECONDARY:
 		c.give_weapon(weapon_id, c.secondary_id == "")
 		c._set_ammo(weapon_id, mag, reserve)
-	AudioBank.play_at("draw", self, global_position, -6.0, 1.0, 15.0)
+	AudioBank.play_at("pickup", c, global_position, -4.0, 1.0, 18.0)
 	_consume()
 
 

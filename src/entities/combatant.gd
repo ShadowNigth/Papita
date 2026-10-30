@@ -89,6 +89,7 @@ var _slow_amount := 1.0
 var _rng := RandomNumberGenerator.new()
 var _dead_timer := 0.0
 var _flash_blind := 0.0
+var _last_pain_sfx := 0.0
 
 
 func _ready() -> void:
@@ -398,7 +399,7 @@ func select_slot(slot: int) -> void:
 	next_fire_time = _now() + float(def.get("draw", 0.5)) * (0.7 if has_meta("speed_cola") else 1.0)
 	burst_left = 0
 	if is_player:
-		AudioBank.play_2d("draw", -8.0, _rng.randf_range(0.95, 1.05))
+		AudioBank.weapon_deploy(current_id, true)
 	if actor_model and not is_player:
 		actor_model.equip(def)
 	weapon_state_changed.emit(self)
@@ -461,11 +462,11 @@ func reload() -> void:
 	reload_time_left = reload_total
 	reloading_id = current_id
 	if is_player:
-		AudioBank.play_2d("reload_out", -6.0, _rng.randf_range(0.95, 1.05))
+		AudioBank.weapon_reload_step(reloading_id, 0, true, get_parent(), global_position)
 		_play_reload_sequence(def)
 		_on_reload_started(reload_total)
 	else:
-		AudioBank.play_at("reload_out", get_parent(), global_position, -6.0, 1.0, 20.0)
+		AudioBank.weapon_reload_step(reloading_id, 0, false, get_parent(), global_position)
 	weapon_state_changed.emit(self)
 	_start_reload_timer()
 
@@ -492,14 +493,15 @@ func _start_reload_timer() -> void:
 
 
 func _play_reload_sequence(def: Dictionary) -> void:
-	var t := get_tree().create_timer(reload_total * 0.35)
+	var wid := reloading_id
+	var t := get_tree().create_timer(reload_total * 0.48)
 	t.timeout.connect(
 		func() -> void:
-			if alive:
-				AudioBank.play_2d("reload_in", -5.0)
+			if alive and is_player:
+				AudioBank.weapon_reload_step(wid, 1, true, get_parent(), global_position)
 	)
 	if def.get("reload_shell", false):
-		var t2 := get_tree().create_timer(reload_total * 0.7)
+		var t2 := get_tree().create_timer(reload_total * 0.78)
 		t2.timeout.connect(
 			func() -> void:
 				if alive and is_player:
@@ -528,7 +530,7 @@ func _finish_reload() -> void:
 	_set_ammo(id, a.x + take, new_reserve)
 	reload_time_left = 0.0
 	if is_player:
-		AudioBank.play_2d("reload_in", -6.0)
+		AudioBank.weapon_reload_step(id, 2, true, get_parent(), global_position)
 	weapon_state_changed.emit(self)
 
 
@@ -594,7 +596,9 @@ func _handle_weapon(delta: float) -> void:
 		if not trigger_was_down:
 			trigger_was_down = true
 			if is_player:
-				AudioBank.play_2d("empty", -6.0)
+				AudioBank.play_2d(
+					"empty_pistol" if current_slot == Content.SLOT_SECONDARY else "empty", -4.0
+				)
 		if Settings.data.gameplay.get("auto_reload", false):
 			reload()
 		return
@@ -632,17 +636,15 @@ func _do_fire() -> void:
 		if spread > 0.0001:
 			d = _apply_cone(dir, spread)
 		_hitscan(origin, d, def, i == 0)
-	var family: String = def.get("sound", "rifle")
-	var loud := 55.0
-	if silenced:
-		family = "silenced"
-		loud = 18.0
-	AudioBank.weapon_fire(family, get_parent(), origin, 90.0 if not silenced else 40.0)
+	var loud := 55.0 if not silenced else 18.0
+	AudioBank.weapon_fire_id(
+		current_id, silenced, get_parent(), origin, is_player, 95.0 if not silenced else 42.0
+	)
 	fired.emit(origin, loud, team, current_id)
 	var muzzle_pos := origin + dir * 0.5
 	Fx.muzzle(get_parent(), muzzle_pos, dir)
 	if is_player:
-		AudioBank.play_2d("shell", -14.0, _rng.randf_range(0.9, 1.1))
+		AudioBank.play_2d("shell", -13.0, _rng.randf_range(0.92, 1.08))
 	# Retroceso.
 	var r: float = float(def.get("recoil", 1.0))
 	var zoom_factor := 0.45 if zoom_level > 0 else 1.0
@@ -650,8 +652,21 @@ func _do_fire() -> void:
 	recoil_yaw += _rng.randf_range(-1.0, 1.0) * r * 0.007 * zoom_factor
 	if is_player:
 		_apply_player_recoil(r, def)
-	if pellets > 1 and is_player:
-		AudioBank.play_2d("pump", -10.0, _rng.randf_range(0.95, 1.05))
+	if current_id == "m3" and is_player:
+		var tp := get_tree().create_timer(0.28)
+		tp.timeout.connect(
+			func() -> void:
+				if alive and current_id == "m3":
+					AudioBank.play_2d("pump", -6.0, _rng.randf_range(0.97, 1.03))
+		)
+	elif (current_id == "awp" or current_id == "scout") and is_player:
+		var bolt_id := current_id
+		var tb := get_tree().create_timer(0.34)
+		tb.timeout.connect(
+			func() -> void:
+				if alive and current_id == bolt_id:
+					AudioBank.weapon_reload_step(bolt_id, 2, true, get_parent(), global_position)
+		)
 	weapon_state_changed.emit(self)
 
 
@@ -727,12 +742,29 @@ func _hitscan(origin: Vector3, dir: Vector3, def: Dictionary, _primary: bool) ->
 				hit_confirmed.emit(self, victim, dmg, headshot)
 				var blood_dir := -dir
 				Fx.blood(get_parent(), point, blood_dir, 16 if headshot else 10)
-				AudioBank.play_at("flesh_hit", get_parent(), point, -4.0, 1.0, 25.0)
+				if headshot:
+					AudioBank.play_at(
+						"helmet_hit" if victim.helmet else "headshot",
+						get_parent(),
+						point,
+						-2.0,
+						1.0,
+						28.0
+					)
+				else:
+					AudioBank.play_at(
+						"kevlar_hit" if victim.armor > 0.0 else "flesh_hit",
+						get_parent(),
+						point,
+						-4.0,
+						1.0,
+						25.0
+					)
 				if headshot and Settings.data.gameplay.get("headshot_sound", true):
 					if is_player:
-						AudioBank.play_2d("headshot", -6.0)
+						AudioBank.play_2d("headshot", -4.5)
 				if is_player and Settings.data.gameplay.get("hitmarker", true):
-					AudioBank.play_2d("hitmarker", -10.0)
+					AudioBank.play_2d("hitmarker", -12.0)
 			return
 		# Impacto en geometria.
 		Fx.impact(get_parent(), point, normal, _surface_kind(collider))
@@ -818,8 +850,14 @@ func take_damage(
 	last_attacker = attacker
 	health_changed.emit(self, health, armor)
 	damaged.emit(self, dmg, attacker, hitbox, weapon_id)
-	if _slow_timer <= 0.0 and health > 0.0:
-		pass
+	if health > 0.0 and _now() - _last_pain_sfx > 0.65:
+		_last_pain_sfx = _now()
+		var pain_key := "zombie_death" if is_zombie else "pain"
+		if weapon_id == "fall":
+			pain_key = "fall_pain"
+		AudioBank.play_at(
+			pain_key, get_parent(), global_position + Vector3(0, 1.2, 0), -5.0, 1.0, 22.0
+		)
 	if health <= 0.0:
 		die(attacker, weapon_id, hitbox == "head", penetrated)
 
@@ -971,10 +1009,18 @@ func _melee_attack() -> void:
 				total_hits += 1
 				hit_confirmed.emit(self, victim, dmg, back)
 				Fx.blood(get_parent(), hit.position, -dir, 18 if back else 10)
-				AudioBank.play_at("knife_hit", get_parent(), hit.position, 0.0, 1.0, 25.0)
+				AudioBank.play_at(
+					"knife_stab" if back else "knife_hit",
+					get_parent(),
+					hit.position,
+					0.0,
+					1.0,
+					25.0
+				)
 				_on_melee_attacked(true)
 				return
 		Fx.impact(get_parent(), hit.position, hit.normal, "concrete")
+		AudioBank.play_at("knife_wall", get_parent(), hit.position, -3.0, 1.0, 20.0)
 		_on_melee_attacked(true)
 		return
 	_on_melee_attacked(false)
@@ -999,8 +1045,12 @@ func _throw_grenade() -> void:
 	if game and game.has_method("spawn_grenade"):
 		game.call("spawn_grenade", self, id, origin + dir * 0.4, dir * 17.0 + Vector3(0, 3.0, 0))
 	AudioBank.play_at(
-		"grenade_throw", get_parent(), origin, -4.0, _rng.randf_range(0.95, 1.05), 25.0
+		"grenade_throw", get_parent(), origin, -3.0, _rng.randf_range(0.97, 1.03), 25.0
 	)
+	if is_player:
+		AudioBank.play_2d("fire_in_hole", -3.0)
+	elif not is_zombie:
+		AudioBank.play_at("fire_in_hole", get_parent(), origin, -4.0, 1.0, 32.0)
 	_on_grenade_thrown()
 	weapon_state_changed.emit(self)
 
@@ -1011,7 +1061,8 @@ func toggle_silencer() -> void:
 		return
 	silencer_on = not silencer_on
 	next_fire_time = _now() + 0.5
-	AudioBank.play_2d("draw", -10.0)
+	if is_player:
+		AudioBank.weapon_silencer(current_id, silencer_on)
 	_on_silencer_toggled(silencer_on)
 	weapon_state_changed.emit(self)
 
@@ -1023,6 +1074,8 @@ func toggle_zoom() -> void:
 		return
 	zoom_max = 1
 	zoom_level = 0 if zoom_level > 0 else 1
+	if is_player:
+		AudioBank.play_2d("zoom", -4.0)
 	next_fire_time = _now() + 0.2
 
 

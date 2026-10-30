@@ -41,7 +41,7 @@ func setup_hostage(pos: Vector3) -> void:
 
 func start_follow(leader: Combatant) -> void:
 	following = leader
-	AudioBank.play_at("radio", self, global_position, -4.0, 1.0, 20.0)
+	AudioBank.play_at("hostage_use", self, global_position, -2.0, 1.0, 24.0)
 
 
 func stop_follow() -> void:
@@ -81,4 +81,4 @@ func take_damage(
 	_amount: float, _attacker: Node, _hitbox: String, _weapon_id: String, _penetrated: bool = false
 ) -> void:
 	# Los rehenes no mueren: se pueden recuperar siempre.
-	AudioBank.play_at("radio", self, global_position, -6.0, 1.4, 15.0)
+	AudioBank.play_at("hostage_pain", self, global_position, -3.0, 1.0, 20.0)

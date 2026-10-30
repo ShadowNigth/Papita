@@ -303,7 +303,7 @@ func _after_freeze() -> void:
 	if player and player.alive:
 		player.input_enabled = true
 		capture_mouse(true)
-	AudioBank.play_at("round_start", self, player.global_position, 0.0, 1.0, 60.0)
+	AudioBank.play_2d("round_start", -1.5)
 	message.emit("ADELANTE!", Color(0.7, 0.9, 0.5), 2.0)
 	state_changed.emit(round_state)
 	if mode == "bomb":
@@ -546,7 +546,7 @@ func _update_hostages() -> void:
 				player.money = mini(Content.MAX_MONEY, player.money + Content.RESCUE_REWARD)
 				Settings.add_progress("golden_rescues", 1.0)
 			message.emit("REHEN RESCATADO", Color(0.5, 1.0, 0.6), 3.0)
-			AudioBank.play_2d("radio", -2.0)
+			AudioBank.play_2d("hostage_rescued", -1.5)
 			if _all_hostages_rescued():
 				_end_round(Content.TEAM_CT, "TODOS LOS REHENES A SALVO")
 
@@ -569,7 +569,8 @@ func _end_round(winner: int, reason: String) -> void:
 		score_ct += 1
 	else:
 		score_t += 1
-	AudioBank.play_2d("win_good" if winner == player_team else "win_bad", 0.0)
+	if reason != "BOMBA DESACTIVADA":
+		AudioBank.play_win_voice(winner)
 	message.emit(
 		"%s GANA LA RONDA - %s" % ["CT" if winner == Content.TEAM_CT else "T", reason],
 		Color(0.5, 0.85, 1.0) if winner == Content.TEAM_CT else Color(1.0, 0.7, 0.35),
@@ -870,7 +871,7 @@ func planted_call(planter: Combatant, site: String) -> void:
 	planter.set_meta("planted_this_round", true)
 	planter.money = mini(Content.MAX_MONEY, planter.money + Content.PLANT_REWARD)
 	message.emit("C4 PLANTADO EN %s" % site, Color(1.0, 0.4, 0.3), 4.0)
-	AudioBank.play_2d("plant", 0.0)
+	AudioBank.play_2d("bomb_planted_voice", -1.0)
 	round_time_left = 9999.0
 	for c in all_combatants:
 		if c.is_bot and not c.is_zombie:
@@ -887,6 +888,7 @@ func planted_call(planter: Combatant, site: String) -> void:
 
 func _on_bomb_defused() -> void:
 	message.emit("BOMBA DESACTIVADA", Color(0.4, 0.8, 1.0), 4.0)
+	AudioBank.play_2d("bomb_defused_voice", -1.0)
 	var defuser: Combatant = null
 	if bomb != null and is_instance_valid(bomb):
 		defuser = bomb.defusing_by
@@ -948,7 +950,8 @@ func spawn_grenade(attacker: Combatant, id: String, position: Vector3, velocity:
 func explode(
 	center: Vector3, radius: float, damage: float, attacker: Node, weapon_id: String
 ) -> void:
-	AudioBank.play_at("explosion", self, center, 6.0, _rng.randf_range(0.9, 1.05), 180.0)
+	var exp_key := "c4_explode" if weapon_id == "c4" else "explosion"
+	AudioBank.play_at(exp_key, self, center, 6.0, _rng.randf_range(0.95, 1.03), 180.0)
 	if player and player.alive:
 		var d := player.global_position.distance_to(center)
 		if d < radius * 2.5:
@@ -1138,15 +1141,18 @@ func buy_item(id: String) -> bool:
 				if player.armor >= 100.0:
 					return false
 				player.equip_armor(player.helmet)
+				AudioBank.play_2d("kevlar", -3.0)
 			"helmet":
 				if player.helmet:
 					return false
 				player.helmet = true
 				player.equip_armor(true)
+				AudioBank.play_2d("kevlar", -3.0)
 			"defusekit":
 				if player.defusekit or player.team != Content.TEAM_CT:
 					return false
 				player.defusekit = true
+				AudioBank.play_2d("buy", -4.0)
 	else:
 		var def := Content.get_weapon(id)
 		if def.is_empty():

@@ -74,13 +74,14 @@ func _physics_process(delta: float) -> void:
 func _on_body_entered(_body: Node) -> void:
 	var speed := linear_velocity.length()
 	if speed > 1.0:
+		var bkey := "he_bounce" if grenade_id == "hegrenade" else "grenade_bounce"
 		AudioBank.play_at(
-			"grenade_bounce",
+			bkey,
 			self,
 			global_position,
-			clampf(-18.0 + speed, -20.0, -4.0),
-			randf_range(0.9, 1.2),
-			22.0
+			clampf(-16.0 + speed, -18.0, -3.0),
+			randf_range(0.95, 1.08),
+			24.0
 		)
 
 
