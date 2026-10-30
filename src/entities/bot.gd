@@ -140,7 +140,7 @@ func _think() -> void:
 		if target_enemy != enemy:
 			reaction_left = float(difficulty.get("reaction", 0.35))
 			if game and game.has_method("on_bot_spotted"):
-				game.on_bot_spotted(self, enemy)
+				game.call("on_bot_spotted", self, enemy)
 		target_enemy = enemy
 		last_seen_pos = enemy.global_position
 		last_seen_time = _now()
@@ -185,7 +185,11 @@ func _find_visible_enemy() -> Combatant:
 		var dir := (to - eye).normalized()
 		if forward.dot(dir) < cos(deg_to_rad(fov * 0.5)) and d > 4.0:
 			continue
-		if is_instance_valid(game) and game.has_method("is_smoked") and game.is_smoked(eye, to):
+		if (
+			is_instance_valid(game)
+			and game.has_method("is_smoked")
+			and bool(game.call("is_smoked", eye, to))
+		):
 			continue
 		var query := PhysicsRayQueryParameters3D.new()
 		query.from = eye
@@ -206,7 +210,7 @@ func _enemies() -> Array:
 	var out: Array = []
 	if game == null:
 		return out
-	for c in game.all_combatants:
+	for c in game.get("all_combatants"):
 		if not is_instance_valid(c) or not c.alive or c == self:
 			continue
 		if c.is_hostage:
@@ -262,13 +266,13 @@ func _combat_movement(delta: float) -> void:
 				_set_state(_objective_state())
 		"plant":
 			if game and game.has_method("bot_try_plant"):
-				if game.bot_try_plant(self):
+				if bool(game.call("bot_try_plant", self)):
 					should_stop = true
 				else:
 					_move_towards(objective)
 		"defuse":
 			if game and game.has_method("bot_try_defuse"):
-				if game.bot_try_defuse(self):
+				if bool(game.call("bot_try_defuse", self)):
 					should_stop = true
 				else:
 					_move_towards(objective)
@@ -347,7 +351,7 @@ func _move_towards(point: Vector3) -> void:
 	var dir := flat.normalized()
 	# Separacion simple de otros bots.
 	if game:
-		for other in game.all_combatants:
+		for other in game.get("all_combatants"):
 			if other == self or not is_instance_valid(other) or not other.alive:
 				continue
 			if not other.is_zombie and is_zombie:
@@ -506,13 +510,14 @@ func _objective_state() -> String:
 func _handle_rescue() -> void:
 	if game == null:
 		return
-	var target = game.nearest_hostage(global_position)
+	var target = game.call("nearest_hostage", global_position)
 	if target == null:
 		_move_towards(objective)
 		return
 	if global_position.distance_to(target.global_position) < 2.2:
-		game.bot_grab_hostage(self, target)
-		objective = game.rescue_point()
+		game.call("bot_grab_hostage", self, target)
+		var rescue_pos: Vector3 = game.call("rescue_point")
+		objective = rescue_pos
 		wish_dir = Vector2.ZERO
 		return
 	_move_towards(target.global_position)
@@ -531,7 +536,7 @@ func _think_zombie() -> void:
 	var best: Combatant = null
 	var best_dist := 9999.0
 	if game:
-		for c in game.survivors():
+		for c in game.call("survivors"):
 			if not is_instance_valid(c) or not c.alive:
 				continue
 			var d := global_position.distance_to(c.global_position)
@@ -578,7 +583,7 @@ func _zombie_attack(ranged: bool) -> void:
 	attack_cooldown = float(zombie_data.get("attack_rate", 1.2)) * _rng.randf_range(0.85, 1.15)
 	var dmg := float(zombie_data.get("damage", 18))
 	if ranged and game and game.has_method("spawn_zombie_spit"):
-		game.spawn_zombie_spit(self, target_enemy, dmg)
+		game.call("spawn_zombie_spit", self, target_enemy, dmg)
 		AudioBank.play_at("zombie_attack", get_parent(), global_position, -2.0, 1.1, 25.0)
 		return
 	if target_enemy and global_position.distance_to(target_enemy.global_position) < 2.4:
@@ -587,7 +592,7 @@ func _zombie_attack(ranged: bool) -> void:
 			"zombie_attack", get_parent(), global_position, 0.0, _rng.randf_range(0.9, 1.1), 30.0
 		)
 		if game and game.has_method("on_zombie_hit"):
-			game.on_zombie_hit(self, target_enemy)
+			game.call("on_zombie_hit", self, target_enemy)
 
 
 func hear_noise(origin: Vector3, loudness: float) -> void:

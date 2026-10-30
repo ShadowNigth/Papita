@@ -171,7 +171,7 @@ func _look(relative: Vector2) -> void:
 		factor *= 0.42
 	elif _ads:
 		factor *= 0.8
-	var invert := -1.0 if bool(Settings.data.gameplay.get("invert_y", false)) else 1.0
+	var invert: float = -1.0 if bool(Settings.data.gameplay.get("invert_y", false)) else 1.0
 	rotate_y(-relative.x * factor)
 	_pitch = clampf(_pitch - relative.y * factor * invert, -1.45, 1.35)
 	_apply_camera_rotation()

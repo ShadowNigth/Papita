@@ -81,7 +81,7 @@ static func build(def: Dictionary) -> Node3D:
 	var vm: Dictionary = def.get("vm", {})
 	var kind: String = vm.get("kind", "rifle")
 	var color: Color = vm.get("color", Color(0.2, 0.2, 0.22))
-	var metal := _metal.duplicate()
+	var metal: StandardMaterial3D = _metal.duplicate() as StandardMaterial3D
 	metal.albedo_color = color
 	var wood: bool = vm.get("wood", false)
 	var accent := _wood if wood else _dark

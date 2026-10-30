@@ -158,7 +158,7 @@ func start_match(map: String, game_mode: String, team: int, bot_count: int, diff
 		_loading_layer = null
 	capture_mouse(true)
 	if hud:
-		hud.visible = true
+		hud.set("visible", true)
 
 
 func _setup_ui() -> void:
@@ -606,7 +606,7 @@ func _check_match_end() -> void:
 			Settings.add_progress("wins")
 		Settings.add_progress("matches")
 		if ingame_ui and ingame_ui.has_method("show_match_end"):
-			ingame_ui.show_match_end(won, score_ct, score_t)
+			ingame_ui.call("show_match_end", won, score_ct, score_t)
 
 
 func _on_combatant_died(
@@ -638,7 +638,7 @@ func _on_combatant_died(
 		if mode == "zombie":
 			_handle_player_death_zombie()
 		if ingame_ui and ingame_ui.has_method("show_death"):
-			ingame_ui.show_death(killer_name)
+			ingame_ui.call("show_death", killer_name)
 	if victim.is_zombie:
 		total_zombies_killed += 1
 		wave_kills += 1
@@ -1428,7 +1428,7 @@ func _handle_player_death_zombie() -> void:
 	)
 	Settings.queue_save()
 	if ingame_ui and ingame_ui.has_method("show_zombie_gameover"):
-		ingame_ui.show_zombie_gameover(wave, total_zombies_killed)
+		ingame_ui.call("show_zombie_gameover", wave, total_zombies_killed)
 
 
 func survivors() -> Array:

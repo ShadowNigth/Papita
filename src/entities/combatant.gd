@@ -408,7 +408,7 @@ func cycle_weapon(direction: int) -> void:
 		slots.append(Content.SLOT_C4)
 	if slots.is_empty():
 		return
-	var idx := slots.find(current_slot)
+	var idx: int = slots.find(current_slot)
 	if idx == -1:
 		idx = 0
 	idx = (idx + direction + slots.size()) % slots.size()
@@ -594,7 +594,7 @@ func _do_fire() -> void:
 	total_shots += 1
 	var origin := get_fire_origin()
 	var dir := get_fire_direction()
-	var silenced := silencer_on and bool(def.get("silencer", false))
+	var silenced: bool = silencer_on and bool(def.get("silencer", false))
 	var pellets: int = int(def.get("pellets", 1))
 	var spread := _current_spread(def)
 	for i in pellets:

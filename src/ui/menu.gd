@@ -1083,7 +1083,9 @@ func _build_stats() -> void:
 	right.add_child(profile_group)
 	var name_row := HBoxContainer.new()
 	name_row.add_child(UITheme.label("Nombre:", 13, UITheme.TEXT_DIM))
-	name_row.add_child(UITheme.label(String(profile.get("name", "Papita")), 14, UITheme.TEXT, true))
+	name_row.add_child(
+		UITheme.label(String(Settings.data.profile.get("name", "Papita")), 14, UITheme.TEXT, true)
+	)
 	profile_group.add_child(name_row)
 	profile_group.add_child(
 		UITheme.label(

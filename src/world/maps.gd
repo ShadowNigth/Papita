@@ -85,7 +85,7 @@ static func _wall_openings(
 ) -> void:
 	var start := minf(a0, a1)
 	var end := maxf(a0, a1)
-	var sorted := openings.duplicate()
+	var sorted: Array = openings.duplicate()
 	sorted.sort_custom(func(x, y): return float(x.get("off", 0)) < float(y.get("off", 0)))
 	var cursor := start
 	for op in sorted:

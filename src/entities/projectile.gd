@@ -94,15 +94,15 @@ func _explode() -> void:
 		"hegrenade":
 			Fx.explosion(get_parent(), pos, true)
 			if game and game.has_method("explode"):
-				game.explode(pos, 7.5, 98.0, attacker, "hegrenade")
+				game.call("explode", pos, 7.5, 98.0, attacker, "hegrenade")
 		"flashbang":
 			Fx.flash(get_parent(), pos)
 			AudioBank.play_at("flashbang", get_parent(), pos, 4.0, 1.0, 70.0)
 			if game and game.has_method("flash_at"):
-				game.flash_at(pos, attacker)
+				game.call("flash_at", pos, attacker)
 		"smokegrenade":
 			Fx.smoke_cloud(get_parent(), pos, 4.2)
 			AudioBank.play_at("smoke", get_parent(), pos, 0.0, 1.0, 45.0)
 			if game and game.has_method("add_smoke"):
-				game.add_smoke(pos, 4.5, 14.0)
+				game.call("add_smoke", pos, 4.5, 14.0)
 	queue_free()

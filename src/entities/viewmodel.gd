@@ -78,7 +78,9 @@ func _prepare_materials(node: Node) -> void:
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			var mat := mi.material_override
 			if mat is StandardMaterial3D:
-				var dup := (mat as StandardMaterial3D).duplicate() as StandardMaterial3D
+				var dup: StandardMaterial3D = (
+					(mat as StandardMaterial3D).duplicate() as StandardMaterial3D
+				)
 				dup.no_depth_test = true
 				dup.render_priority = 2
 				mi.material_override = dup
