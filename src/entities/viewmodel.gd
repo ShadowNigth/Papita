@@ -166,11 +166,11 @@ func set_silenced(enabled: bool, animate_toggle: bool = false) -> void:
 
 
 func on_fire() -> void:
-	var recoil: float = clampf(float(def.get("recoil", 1.0)) * 0.012, 0.004, 0.032)
-	_kick = minf(_kick + recoil, 0.045)
-	_kick_rot = minf(_kick_rot + recoil * 1.4, 0.08)
-	_sway.x += _rng.randf_range(-0.006, 0.006)
-	_sway.y += _rng.randf_range(-0.004, 0.006)
+	var recoil: float = clampf(float(def.get("recoil", 1.0)) * 0.008, 0.003, 0.020)
+	_kick = minf(_kick + recoil, 0.024)
+	_kick_rot = minf(_kick_rot + recoil * 1.8, 0.075)
+	_sway.x += _rng.randf_range(-0.004, 0.004)
+	_sway.y += _rng.randf_range(-0.003, 0.004)
 	if _using_mdl:
 		_shot_idx = (_shot_idx + 1) % 3
 		if String(def.get("id", "")) == "elite":
@@ -255,21 +255,21 @@ func update(
 	var sway_scale: float = float(Settings.data.gameplay.get("viewmodel_sway", 1.0))
 	var bob_scale: float = float(Settings.data.gameplay.get("bob", 1.0))
 	_sway.x = lerpf(
-		_sway.x, clampf(-mouse_delta.x * 0.00045 * sway_scale, -0.02, 0.02), delta * 10.0
+		_sway.x, clampf(-mouse_delta.x * 0.0003 * sway_scale, -0.014, 0.014), delta * 10.0
 	)
 	_sway.y = lerpf(
-		_sway.y, clampf(mouse_delta.y * 0.00045 * sway_scale, -0.016, 0.016), delta * 10.0
+		_sway.y, clampf(mouse_delta.y * 0.0003 * sway_scale, -0.011, 0.011), delta * 10.0
 	)
 	if grounded and speed > 0.6:
 		_bob_phase += delta * (5.2 + speed * 1.35)
-	var bob_amp := 0.0045 * bob_scale * (0.75 if walking else 1.0) * (0.45 if _ads else 1.0)
+	var bob_amp := 0.003 * bob_scale * (0.75 if walking else 1.0) * (0.45 if _ads else 1.0)
 	var bob := Vector3(sin(_bob_phase) * bob_amp, -absf(cos(_bob_phase)) * bob_amp * 0.85, 0.0)
 	if not grounded:
-		bob = Vector3(0.0, 0.004, 0.0)
-	var crouch_off := Vector3(0.0, -0.008, 0.008) if crouch else Vector3.ZERO
-	var ads_off := Vector3(-0.028, 0.012, 0.025) if _ads else Vector3.ZERO
+		bob = Vector3(0.0, 0.0028, 0.0)
+	var crouch_off := Vector3(0.0, -0.005, 0.004) if crouch else Vector3.ZERO
+	var ads_off := Vector3(-0.018, 0.008, 0.012) if _ads else Vector3.ZERO
 	var target := _base_pos + crouch_off + ads_off + bob + Vector3(_sway.x, _sway.y, 0.0)
-	target.z += _kick
+	target.z = minf(target.z + _kick, 0.016)
 	target.y -= _kick * 0.2
 
 	var reload_rot := 0.0

@@ -32,9 +32,9 @@ var _mouse_accum := Vector2.ZERO
 
 
 func _ready() -> void:
-	super._ready()
 	is_player = true
 	is_bot = false
+	super._ready()
 	add_to_group("player")
 	mouse_sensitivity = float(Settings.data.gameplay.get("sensitivity", 1.6))
 	_base_fov = float(Settings.data.video.get("fov", 90.0))
@@ -51,10 +51,10 @@ func _build_view() -> void:
 	camera = Camera3D.new()
 	camera.name = "Camera"
 	camera.fov = _base_fov
-	camera.near = 0.015
+	camera.near = 0.008
 	camera.far = 650.0
 	camera.current = true
-	camera.position = Vector3(0, 0, 0.08)
+	camera.position = Vector3.ZERO
 	camera_rig.add_child(camera)
 	viewmodel = Viewmodel.new()
 	viewmodel.setup(camera)
@@ -67,17 +67,23 @@ func _build_view() -> void:
 	flashlight.spot_angle_attenuation = 1.2
 	flashlight.shadow_enabled = false
 	flashlight.visible = false
-	flashlight.position = Vector3(0.18, -0.1, 0.2)
+	flashlight.position = Vector3(0.18, -0.1, 0.12)
 	camera.add_child(flashlight)
 	set_meta("camera", camera)
 	if actor_model:
 		actor_model.visible = false
+	if model_container:
+		model_container.visible = false
 
 
 func setup_player(team_id: int, pname: String) -> void:
+	is_player = true
+	is_bot = false
 	configure(pname, team_id, false)
 	if actor_model:
 		actor_model.visible = false
+	if model_container:
+		model_container.visible = false
 	if primary_id == "":
 		give_weapon("glock18" if team_id == Content.TEAM_T else "usp45")
 		give_weapon("knife")
@@ -367,6 +373,10 @@ func _drop_current() -> void:
 
 func on_respawn(pos: Vector3) -> void:
 	respawn(pos)
+	if actor_model:
+		actor_model.visible = false
+	if model_container:
+		model_container.visible = false
 	_dead_time = 0.0
 	_pitch = 0.0
 	_shake = 0.0

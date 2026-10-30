@@ -14,7 +14,7 @@ const STUDIO_NF_FULLBRIGHT: int = 0x0004
 const STUDIO_NF_ADDITIVE: int = 0x0020
 const STUDIO_NF_MASKED: int = 0x0040
 
-const VIEWMODEL_SCALE := 0.012
+const VIEWMODEL_SCALE := 0.008
 const ACTOR_SCALE := 0.0275
 const HOSTAGE_SCALE := 0.0255
 const WORLD_SCALE := 0.026
@@ -205,14 +205,20 @@ static func _parse_raw(path: String) -> Dictionary:
 	var attidx := data.decode_s32(216)
 
 	var bones: Array[Dictionary] = []
+	var used_bone_names: Dictionary = {}
 	for i in numbones:
 		var b := boneidx + i * 112
 		if b + 112 > data.size():
 			break
 		var raw_name := _read_cstring(data, b, 32)
 		var safe_name := raw_name
-		if safe_name == "" or safe_name.contains(":") or safe_name.contains("/"):
+		for bad_ch in [":", "/", ".", "@", "%", "\\"]:
+			safe_name = safe_name.replace(bad_ch, "_")
+		if safe_name == "":
 			safe_name = "bone_" + str(i)
+		if used_bone_names.has(safe_name):
+			safe_name = safe_name + "_" + str(i)
+		used_bone_names[safe_name] = true
 		var vals := PackedFloat32Array()
 		var scales := PackedFloat32Array()
 		vals.resize(6)
@@ -688,9 +694,14 @@ static func _build_array_mesh(
 					)
 					if weld.has(key):
 						var existing_idx: int = int(weld[key])
+						var same_bone := (
+							not skinned or bones_arr[existing_idx * 4] == int(v_bones[vi])
+						)
 						if (
-							uvs[existing_idx].distance_squared_to(uv) < 0.00001
+							same_bone
+							and uvs[existing_idx].distance_squared_to(uv) < 0.00001
 							and verts[existing_idx].distance_squared_to(model_v[vi]) < 0.000001
+							and norms[existing_idx].dot(model_n[ni]) > 0.98
 						):
 							indices.append(existing_idx)
 							continue
@@ -837,6 +848,7 @@ static func build_viewmodel(weapon_id: String) -> Dictionary:
 		_viewmodel_cache[path] = {
 			"bones": bones,
 			"rest_locals": rest_locals,
+			"skin": null,
 			"mesh": mesh,
 			"lib": lib,
 			"seqs": seq_names,
@@ -847,11 +859,14 @@ static func build_viewmodel(weapon_id: String) -> Dictionary:
 	var root := Node3D.new()
 	root.name = "CS15Viewmodel"
 	var skel := _make_skeleton(tpl["bones"], tpl["rest_locals"])
+	if tpl["skin"] == null:
+		tpl["skin"] = skel.create_skin_from_rest_transforms()
 	root.add_child(skel)
 
 	var mi := MeshInstance3D.new()
 	mi.name = "Mesh"
 	mi.mesh = tpl["mesh"]
+	mi.skin = tpl["skin"]
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	skel.add_child(mi)
 	mi.skeleton = NodePath("..")
@@ -872,10 +887,10 @@ static func build_viewmodel(weapon_id: String) -> Dictionary:
 			muzzle.position = _gs_pos_to_godot(org.x, org.y, org.z, VIEWMODEL_SCALE)
 			ba.add_child(muzzle)
 		else:
-			muzzle.position = Vector3(0.08, -0.05, -0.32)
+			muzzle.position = Vector3(0.055, -0.035, -0.22)
 			root.add_child(muzzle)
 	else:
-		muzzle.position = Vector3(0.08, -0.05, -0.32)
+		muzzle.position = Vector3(0.055, -0.035, -0.22)
 		root.add_child(muzzle)
 
 	var player := AnimationPlayer.new()
@@ -1365,6 +1380,7 @@ static func _get_actor_template(
 	var tpl := {
 		"bones": bones,
 		"rest_locals": rest_locals,
+		"skin": null,
 		"mesh": mesh,
 		"lib": lib,
 		"r_hand_idx": r_hand_idx,
@@ -1399,12 +1415,15 @@ static func build_actor(
 	var root := Node3D.new()
 	root.name = "CS15Actor"
 	var skel := _make_skeleton(tpl["bones"], tpl["rest_locals"])
+	if tpl["skin"] == null:
+		tpl["skin"] = skel.create_skin_from_rest_transforms()
 	skel.position.y = float(tpl["stand_y"])
 	root.add_child(skel)
 
 	var mi := MeshInstance3D.new()
 	mi.name = "Mesh"
 	mi.mesh = tpl["mesh"]
+	mi.skin = tpl["skin"]
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	skel.add_child(mi)
 	mi.skeleton = NodePath("..")

@@ -122,6 +122,12 @@ func configure(player_name: String, team_id: int, bot: bool) -> void:
 
 
 func _setup_model() -> void:
+	if is_player:
+		if actor_model != null:
+			actor_model.visible = false
+		if model_container != null:
+			model_container.visible = false
+		return
 	if model_container == null:
 		model_container = Node3D.new()
 		model_container.name = "Model"
@@ -141,14 +147,21 @@ func setup_for_zombie(ztype: String, z_scale: float, z_color: Color, z_hp: float
 	health = z_hp
 	remove_from_group("team_t")
 	add_to_group("zombie")
-	if model_container == null:
-		model_container = Node3D.new()
-		model_container.name = "Model"
-		add_child(model_container)
-		actor_model = ActorModel.new()
-		actor_model.name = "Actor"
-		model_container.add_child(actor_model)
-	actor_model.setup(3, true, z_color, z_scale)
+	if is_player:
+		if actor_model != null:
+			actor_model.visible = false
+		if model_container != null:
+			model_container.visible = false
+	else:
+		if model_container == null:
+			model_container = Node3D.new()
+			model_container.name = "Model"
+			add_child(model_container)
+			actor_model = ActorModel.new()
+			actor_model.name = "Actor"
+			model_container.add_child(actor_model)
+		actor_model.setup(3, true, z_color, z_scale)
+		actor_model.visible = true
 	capsule.height = 1.8 * z_scale
 	capsule.radius = 0.36 * z_scale
 	collision_shape.position = Vector3(0, 0.9 * z_scale, 0)
@@ -881,8 +894,13 @@ func respawn(pos: Vector3, health_amount: float = -1.0) -> void:
 	trigger_was_down = false
 	reload_time_left = 0.0
 	if actor_model:
-		actor_model.revive()
-		actor_model.visible = true
+		if is_player:
+			actor_model.visible = false
+		else:
+			actor_model.revive()
+			actor_model.visible = true
+	if is_player and model_container:
+		model_container.visible = false
 	_was_grounded = true
 	if current_id == "":
 		current_id = "knife"
