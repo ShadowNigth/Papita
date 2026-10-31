@@ -1,91 +1,83 @@
-# Arquitectura técnica
+# Arquitectura
 
-## Ciclo de vida
+## Idea
 
-`main.tscn` → `src/core/app.gd` (nodo raíz `App`) → alterna entre `Menu` y `MatchGame`.
+El proyecto anterior (`legacy/godot/`) reimplementaba Counter-Strike en Godot:
+20 500 líneas de GDScript con loaders propios de `.mdl` y `.bsp`. Funcionaba,
+pero era una interpretación: geometría procedural, texturas generadas, balística
+aproximada.
 
-Autoloads (en orden):
-
-1. **Settings** — carga `user://settings.cfg`, aplica vídeo/audio/controles, guarda perfil y progreso.
-2. **I18n** — tablas ES/EN y `t()`.
-3. **AudioBank** — sintetiza el audio (en hilo aparte) y expone `play_ui`, `play_2d`, `play_at`, `weapon_fire`, `footstep`, `set_music`, `set_ambience`.
-4. **Content** — base de datos pura: `WEAPONS`, `EQUIPMENT`, `BUY_MENU`, `MAPS`, `ZOMBIE_TYPES`, `PERKS`, `DIFFICULTY`, economía y escalado de oleadas.
-
-## Flujo de una partida
+Esta versión cambia el enfoque: **no se reimplementa el motor, se usa uno**.
+Xash3D-FWGS es una reimplementación libre y compatible de GoldSrc; cargando los
+archivos originales dentro de él se obtiene el juego real, no una aproximación.
 
 ```
-App.start_match(map, mode, team, bots, diff)
-  └─ MatchGame.start_match()
-       ├─ Maps.build(map_id)              → layout (bloques, props, luces, spawns, sitios)
-       ├─ MapBuilder.setup(layout)        → geometría + ambiente + props + partículas
-       ├─ MapBuilder.bake_navigation()    → NavGraph (grilla de alturas + A*)
-       ├─ Player / Bot(s) / Hostage(s)
-       ├─ HUD + InGameUI
-       └─ start_round()                   → congelado, compra, objetivos, ronda en vivo
+                    ┌──────────────────────────────┐
+   assets/  ───────►│  game/cstrike/  (gamedir)    │
+   (.mdl .bsp .wav) │  models/ sound/ maps/ *.cfg  │
+                    └───────────┬──────────────────┘
+                                │ lo lee
+                    ┌───────────▼──────────────────┐
+                    │  runtime/xash (Xash3D-FWGS)  │  motor: BSP, MDL, red, física
+                    └───────────┬──────────────────┘
+                    carga ┌─────┴──────┐
+                          ▼            ▼
+                 dlls/cs_amd64.so   cl_dll/client_amd64.so
+                 (ReGameDLL: reglas) (cs16-client: HUD, menús, predicción)
 ```
 
-### Rondas (bomb / hostage)
+## Quién hace qué
 
-- `freeze` (4 s): compra libre, movimiento bloqueado.
-- `live`: ronda activa, reloj, objetivos, comprobación de fin.
-- `end` (4,5 s): recompensas y siguiente ronda.
-- Fin de partida a 16 rondas.
+**El motor** (`xash3d-fwgs`): parsea `.bsp` v30 (lumps, lightmaps, entidades,
+PVS), `.mdl` v10 (huesos, secuencias, texturas, eventos), sirve los `.wav`,
+gestiona red, física de jugadores, predicción y el sistema de ficheros virtual.
 
-Economía: `START_MONEY` 800, victoria 3250 (3500 por bomba), bonus por derrota 1400→3400 según racha, plantado 800, desactivación 800, rescate 1000, teamkill −3300, tope 16000.
+**El game dll** (`ReGameDLL_CS`, `cs_amd64.so`): las reglas. Economía, compra,
+rondas, C4, rehenes, daño, bot integrado. Es el equivalente a `mp.dll`.
 
-### Combate
+**El client dll** (`cs16-client`): lo que ve el jugador. HUD, menús, selección de
+equipo, viewmodel con animaciones, `cl_*`.
 
-`Combatant._do_fire()` → `_hitscan()` → `PhysicsRayQueryParameters3D` con máscara `1 | PLAYER_LAYER`:
+**`liblist.gam`** es el contrato entre los tres: nombre del juego, versión y ruta
+del game dll.
 
-1. Si acierta un `Combatant`, calcula hitbox (`head/chest/legs`), daño (base × caída por distancia × zona × chaleco) y aplica `take_damage`.
-2. Si acierta geometría, genera impacto y, si el arma penetra, busca la salida y continúa el rayo (hasta 3 segmentos).
-3. Efectos: trazadora, chispas, polvo, sangre, sonido posicional.
+## Por qué 64 bits y `XASH_COMPAT`
 
-Movimiento: aceleración/fricción en suelo, aire con control limitado, salto, crouch (cápsula reducida), paso automático en escalones y sonido de pasos según velocidad.
+Xash3D-FWGS compila a 64 bits con `./waf configure -8`. Para que ReGameDLL
+produzca un `.so` compatible hay que configurarlo con `-DXASH_COMPAT=ON`:
+cambia el ABI a 64 bits y añade el sufijo `_amd64` al nombre de la librería
+(sale `cs_amd64.so`). El motor, por su parte, añade ese sufijo a lo que lea en
+`liblist.gam`; de ahí la combinación `gamedll "dlls/cs.so"` + fichero
+`cs_amd64.so` que parece un error y no lo es.
 
-### IA
+## Los scripts
 
-`Bot._think()` cada 160 ms:
+| Script | Entrada | Salida |
+|---|---|---|
+| `fetch_sources.sh` | `engine/pins.lock` | `.src/` con 3 repos + submódulos |
+| `gen_build_h.py` | arquitectura del host | `.src/xash3d-fwgs/public/build.h` |
+| `build_engine.sh` | `.src/xash3d-fwgs` | `runtime/xash`, `filesystem_stdio.so` |
+| `build_gamedll.sh` | `.src/ReGameDLL_CS` | `cs_amd64.so` |
+| `build_client.sh` | `.src/cs16-client` | `client_*.so`, `menu_*.so` |
+| `assemble_gamedir.py` | `assets/`, `config/` | `game/cstrike/` |
+| `make_free_base.py` | nada | `game/valve/` libre (paleta + fuente) |
+| `bootstrap_valve.py` | tu Half-Life | `game/valve/` enlazado |
+| `cs15_audit.py` | `assets/` | validación + JSON |
+| `smoke_test.sh` | `runtime/`, `game/` | 10 mapas arrancados o error |
 
-- `_find_visible_enemy()`: FOV + raycast + humo.
-- Estados: `engage`, `search`, `investigate`, `attack`, `plant`, `defuse`, `defend`, `rescue`, `roam`.
-- `_combat_movement()`: ruta A* (`NavGraph.find_path`), strafing, separación, salto de obstáculos, desatasco.
-- Disparo con reacción, error de puntería, ráfagas y pausas; no dispara si un aliado está en la línea.
+Nada de esto se versiona: `.src/`, `.build/`, `runtime/` y `game/` están en
+`.gitignore`. El repositorio solo guarda código, configuración, documentación y
+los assets originales.
 
-Zombies: apuntan al superviviente más cercano, atacan cuerpo a cuerpo o escupen a distancia, con escalado de vida/velocidad por oleada.
+## Decisiones
 
-### Navegación
-
-`NavGraph`: celdas de 0,8 m, altura y bloqueo obtenidos con rayos (ignorando techos > 2,9 m) + consulta de forma (cápsula 0,62 × 1,7). A* con heap binario, costo extra por desnivel y suavizado por línea de visión.
-
-### Materiales
-
-`MaterialLib.surface(kind, theme, variant)` genera:
-
-- **Albedo** 128×128 según patrón (ladrillo, madera, metal, arena, musgo…), ruido FastNoiseLite (fractal y celular), grano y variación de color.
-- **Normal** por derivadas del mapa de altura.
-- **ORM** (AO/rugosidad/metálico).
-
-Se cachea por `kind|theme|variant|wetness`. El shader `surface.gdshader` muestrea en triplanar y añade desgaste, humedad y musgo.
-
-### Audio
-
-`Synth` construye buffers `PackedFloat32Array`:
-
-- Ruido filtrado paso bajo con envolventes exponenciales (cuerpo de disparo, pasos, explosiones).
-- Tonos con barrido de frecuencia (seno, sierra, cuadrada, triangular).
-- Reverb de peine, saturación `tanh`, normalización y conversión a `AudioStreamWAV` 16 bits mono 22 050 Hz.
-
-`AudioBank` construye el banco esencial en un `Thread`, mezcla los resultados en `_process` y sintetiza música/ambientes en segundo plano.
-
-## Rendimiento
-
-- Materiales y mallas de props compartidos por caché.
-- Luces con sombra limitadas; farolas y props sin sombra.
-- Partículas con `visibility_aabb` acotado y autodestrucción.
-- HUD dibujado con `_draw` (sin árbol de nodos por elemento).
-- Audio 3D limitado a 48 reproductores simultáneos.
-
-## Guardado
-
-`user://settings.cfg` (ConfigFile) con secciones `video`, `audio`, `gameplay`, `controls`, `profile`, `progress`. Se guarda con debounce (0,8 s) y al cerrar.
+- **Revisiones fijas, no ramas.** `pins.lock` evita que una actualización del
+  motor rompa el build sin avisar.
+- **Assets fuera del gamedir.** Se guardan en `assets/` con nombres neutros y el
+  ensamblador los reubica; así se pueden reorganizar sin tocar los binarios.
+- **Enlaces duros, no copias.** `assemble_gamedir.py` enlaza para no duplicar
+  60 MB en disco (`--copy` si tu sistema de ficheros no lo permite).
+- **El gamedir es desechable.** Siempre se puede borrar y regenerar; nada único
+  vive en `game/`.
+- **`legacy/godot/` se conserva.** Es el intento anterior, íntegro, por si sirve
+  de referencia o de comparación.

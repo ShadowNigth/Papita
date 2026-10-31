@@ -1,0 +1,20 @@
+// liblist.gam - descriptores del gamedir para el motor GoldSrc/Xash3D.
+// Nota: el motor añade el sufijo de arquitectura al nombre de la libreria
+// (en 64 bits busca dlls/cs_amd64.so), por eso aqui se declara "cs".
+game "Counter-Strike"
+url_info "https://github.com/ShadowNigth/Papita"
+url_dl ""
+version "1.5"
+size "184000000"
+svonly "0"
+secure "0"
+type "multiplayer_only"
+cldll "1"
+hlversion "1109"
+nomodels "1"
+nohimodel "1"
+mpentity "info_player_start"
+gamedll "dlls/cs.so"
+gamedll_linux "dlls/cs.so"
+gamedll_osx "dlls/cs.dylib"
+trainmap "de_train"

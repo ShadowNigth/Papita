@@ -1,9 +1,25 @@
-# Godot
-.godot/
-export_presets.cfg
-*.translation
+# --- generado por los scripts (no se versiona) ---
+.src/
+.build/
+game/
+runtime/
+*.log
 
-# Herramientas locales
-.venv-gdt/
+# --- binarios ---
+*.so
+*.dll
+*.dylib
+*.o
+*.a
+*.exe
+*.AppImage
+*.zip
+
+# --- python ---
 __pycache__/
 *.pyc
+.venv/
+
+# --- sistema ---
+.DS_Store
+Thumbs.db

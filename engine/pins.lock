@@ -1,0 +1,27 @@
+# Dependencias externas fijadas (revision exacta, no ramas moviles).
+# Formato: <slug> <url> <commit>
+#
+# El motor es Xash3D-FWGS: reimplementacion libre del engine GoldSrc capaz de
+# cargar .bsp v30, .mdl v10 y .wav originales de Counter-Strike 1.5.
+xash3d-fwgs  https://github.com/FWGS/xash3d-fwgs.git  a7becfdf8d134eb2ae5cd083a45c816e6b4e42fc
+cs16-client  https://github.com/Velaron/cs16-client.git  a238ef131803ed7592c4ba701499027c862889ee
+ReGameDLL_CS https://github.com/s1lentq/ReGameDLL_CS.git  4a50c42e85fd3778c2b7d24731c7d30c83bbab01
+
+# Submodulos del motor que SI se pueden traer desde GitHub (los usa el build).
+# Los que viven en gitlab.com (bzip2) tienen espejo en GitHub, ver fetch_sources.sh.
+submodule xash3d-fwgs 3rdparty/libbacktrace/libbacktrace  https://github.com/ianlancetaylor/libbacktrace
+submodule xash3d-fwgs 3rdparty/library_suffix           https://github.com/FWGS/library-suffix
+submodule xash3d-fwgs 3rdparty/mbedtls/mbedtls          https://github.com/FWGS/mbedtls-releases
+submodule xash3d-fwgs 3rdparty/extras/xash-extras       https://github.com/FWGS/xash-extras
+submodule xash3d-fwgs 3rdparty/mainui                   https://github.com/FWGS/mainui_cpp
+submodule xash3d-fwgs 3rdparty/nanogl                   https://github.com/FWGS/nanogl
+submodule xash3d-fwgs 3rdparty/freevgui                 https://github.com/FWGS/freevgui
+submodule xash3d-fwgs 3rdparty/MultiEmulator            https://github.com/FWGS/MultiEmulator
+submodule xash3d-fwgs 3rdparty/gl-wes-v2                https://github.com/FWGS/gl-wes-v2
+submodule xash3d-fwgs 3rdparty/miniz                    https://github.com/FWGS/miniz
+submodule xash3d-fwgs 3rdparty/bzip2/bzip2              https://github.com/libarchive/bzip2
+submodule xash3d-fwgs 3rdparty/libogg/libogg            https://github.com/xiph/ogg
+submodule xash3d-fwgs 3rdparty/vorbis/vorbis-src        https://github.com/xiph/vorbis
+submodule xash3d-fwgs 3rdparty/opus/opus                https://github.com/xiph/opus
+submodule xash3d-fwgs 3rdparty/opusfile/opusfile        https://github.com/xiph/opusfile
+submodule xash3d-fwgs 3rdparty/mpg123/mpg123            https://github.com/libsdl-org/mpg123

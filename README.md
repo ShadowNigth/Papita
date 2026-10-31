@@ -1,209 +1,169 @@
-# PAPITA · COUNTER-STRIKE 1.5 REFORGED
+# PAPITA · Counter-Strike 1.5 sobre Xash3D-FWGS
 
-Recreación jugable y **completa** del clásico *Counter-Strike 1.5*, hecha desde cero en **Godot 4.4** como proyecto personal (sin distribución pública).
+Recreación jugable de **Counter-Strike 1.5** usando el **motor real de GoldSrc**
+(Xash3D-FWGS) en lugar de un motor propio, con los **96 modelos StudioModel v10**,
+los **352 sonidos** y los **10 mapas `.bsp` v30** originales que ya viven en
+`assets/`.
 
-> **Modelos 3D y sonidos originales de Counter-Strike 1.5 (`assets/models/cs15/*.mdl` + `assets/sounds/cs15/**/*.wav`)**: integra los 96 modelos StudioModel v10 originales de CS 1.5 y los 340 efectos de sonido originales de CS 1.5 / Half-Life 1 (disparos individuales por arma, recargas, cuchillo, pasos, impactos, C4, granadas, rehenes, radio, voces de ronda e interfaz), manteniendo la música 100 % procedural en `Synth` (sin música original).
+Esto no es un clon aproximado: el motor carga los `.bsp`, `.mdl` y `.wav` tal
+como los guardaba Valve en 2002. La geometría, las texturas embebidas, los
+lightmaps, los huesos, las animaciones y los sonidos son los de siempre.
 
----
-
-## 1. Qué incluye
-
-### Armas (24 de fuego + cuchillo + granadas + C4 = 29 objetos)
-- **Pistolas:** Glock 18 (doble modo con click derecho: semiautomática / ráfaga de 3), USP .45 (silenciable), P228, Desert Eagle, Five-SeveN, Dual Berettas.
-- **Subfusiles:** TMP (silenciado), MAC-10, MP5 Navy, UMP 45, P90.
-- **Escopetas:** M3 Super 90 (corredera), XM1014.
-- **Fusiles:** FAMAS (doble modo con click derecho: automática / ráfaga de 3), Galil, AK-47, M4A1 (silenciable), SG 552 (mira 2x), Steyr AUG (mira 1.8x).
-- **Francotiradores:** Scout, AWP, G3SG1, SG 550 (doble nivel de zoom con click derecho; las armas sin mira no hacen zoom).
-- **Ametralladora:** M249 Para.
-- **Extras:** cuchillo (corte rápido con click izquierdo y apuñalamiento pesado con click derecho), HE, flashbang, granada de humo y C4.
-- Balística con dispersión por movimiento/aire/agachado, retroceso ascendente, penetración de paredes, daño por zona (cabeza ×4, piernas ×0.75), caída de daño por distancia, chaleco y casco, headshots, hitmarkers y killfeed.
-
-### Modos de juego
-- **Bombeo (`de_`)**: compra, economía por rondas (victoria, bonus por racha de derrotas, recompensas por plantar/desactivar), plantado de C4 con cuenta atrás de 40 s, desactivación con/sin kit, explosión con daño en área.
-- **Rehenes (`cs_`)**: liberación, escolta y rescate de rehenes.
-- **Deathmatch (`de_` / `cs_`)**: combate continuo sin rondas con compra libre en cualquier momento (`[B]`), equipamiento persistente y **respawns dinámicos distribuidos por todo el mapa que cambian cada vez que mueres** con protección temporal de reaparición.
-- **Zombie (`zm_`)**: oleadas infinitas con 5 tipos de no-muertos (caminante, corredor, bruto, escupidor y jefe), puntos por daño/baja, caja misteriosa, máquinas de perks (Juggernog, Speed Cola, Double Tap, Quick Revive, Mule Kick), reabastecimiento de munición, aliados bot y progresión de dificultad.
-
-### Mapas (10)
-`de_dust2`, `de_inferno`, `de_aztec`, `de_nuke`, `de_train`, `cs_office`, `cs_italy`, `de_dust`, `zm_mansion`, `zm_dust_night`.
-
-Cada mapa se reconstruye proceduralmente: geometría, props, luces, cielo, niebla, agua, partículas ambientales y **malla de navegación horneada** para los bots.
-
-### Bots
-- 42 nombres, 5 niveles de dificultad (reacción, error de puntería, FOV, oído, vida).
-- Percepción por línea de visión y sonido, combate con ráfagas, strafing, recarga, uso de granadas al comprar, objetivos (plantar, desactivar, rescatar, defender), separación entre bots y desatasco.
-- Navegación A* sobre grilla de altura con escaleras/rampas, suavizado de ruta y saltos.
-
-### Menús y configuración
-- Menú principal con escenario 3D animado, selección de modo, mapa y bando.
-- **Arsenal** con vista previa 3D y estadísticas reales de cada arma.
-- **Estadísticas** de perfil, rangos y 10 logros persistentes.
-- **Opciones completas**: vídeo (modo de pantalla, resolución, FOV, MSAA, sombras, SSAO, SSIL, bloom, niebla volumétrica, VSync, brillo), audio (master/SFX/música/UI/voces/mute), juego (sensibilidad, invertir Y, bots, dificultad, duración de ronda, tiempo de compra, fuego amigo, sangre, HUD, mira, idioma) y **controles con reasignación de teclas**.
-- Menú de pausa, tienda de compra con categorías, marcador (TAB), consola de comandos, ayuda (F1) y pantallas de fin de partida / game over.
-- Guardado de ajustes y progreso en `user://settings.cfg`.
-
-### Iluminación "realista" (shaders)
-- `shaders/surface.gdshader`: material PBR triplanar con albedo + normal map + ORM procedurales, desgaste, humedad a ras de suelo, musgo y rim light.
-- `shaders/sky.gdshader`: cielo atmosférico con sol/luna, halo, nubes noise y estrellas.
-- `shaders/water.gdshader`: agua con oleaje, normales animadas y transparencia.
-- `shaders/scope.gdshader`: mira telescópica con retícula y viñeta.
-- `shaders/foliage.gdshader`: vegetación con viento.
-- Post-proceso del `WorldEnvironment`: ACES, SSAO, SSIL, SSR, niebla volumétrica, bloom, MSAA y sombras PSSM 4-splits.
-- Viewmodel en capa propia con `no_depth_test` y linterna con sombras.
-
-### Audio 100 % procedural
-Todos los sonidos se sintetizan por DSP al arrancar: 16 familias de disparos con variantes, recargas, corredera, cuchillo, impactos, rebotes, pasos, salto, explosiones, flashbang, humo, C4, gritos, gruñidos de zombie, perks, interfaz, ambientes y dos temas musicales. Se construye en un hilo aparte para no congelar el menú.
+> **Estado: verificado hasta donde se puede en un entorno sin pantalla.**
+> El servidor dedicado se compila y arranca, el game dll carga y **los 10 mapas
+> llegan a "player server started"** con sus entidades (`func_bomb_target`,
+> `hostage_entity`, `func_buyzone`, 20 spawns). Lo que no se ha podido probar
+> aquí es el cliente con ventana (no hay SDL2/OpenGL en el entorno de
+> compilación); compilarlo es cosa de tu máquina, ver [`docs/COMPILAR.md`](docs/COMPILAR.md).
 
 ---
 
-## 1.1 Descargar el proyecto
+## 1. Qué hay dentro
 
-**Descarga directa del zip (última versión `v1.0.7`):**
+| Pieza | Repositorio | Licencia | Estado |
+|---|---|---|---|
+| Motor | [FWGS/xash3d-fwgs](https://github.com/FWGS/xash3d-fwgs) `a7becfd` | GPLv3 | compilado y ejecutado |
+| Reglas (game dll) | [s1lentq/ReGameDLL_CS](https://github.com/s1lentq/ReGameDLL_CS) `4a50c42` | MIT | compilado, 64 bits con `XASH_COMPAT` |
+| Cliente (HUD, menús) | [Velaron/cs16-client](https://github.com/Velaron/cs16-client) `a238ef1` | GPLv2+ | receta lista, sin compilar aquí |
+| Recursos base libres | [FWGS/xash-extras](https://github.com/FWGS/xash-extras) | GPLv3 | usado para `cacert.pem` y fuentes |
+| Assets del juego | Material original de CS 1.5 en `assets/` | Propiedad de Valve | **local, no se redistribuye** |
 
-> ### ⬇️ https://github.com/ShadowNigth/Papita/archive/refs/tags/v1.0.7.zip
+Las revisiones exactas están en [`engine/pins.lock`](engine/pins.lock); nada se
+trae de una rama móvil.
 
-- Página de la release: https://github.com/ShadowNigth/Papita/releases/tag/v1.0.7
-- Último estado de la rama de desarrollo (zip): https://github.com/ShadowNigth/Papita/archive/refs/heads/arena/9025a588-papita.zip
-
-El zip contiene el proyecto completo (código, shaders, fuentes, docs y herramientas). No incluye `.git` ni `.godot`.
-
-Para generar el zip tú mismo:
+## 2. Arranque rápido
 
 ```bash
-tools/package.sh            # deja el archivo en /home/user/releases/
+./tools/build_all.sh          # fuentes -> motor -> game dll -> gamedir -> prueba
+./run_server.sh de_dust2      # servidor dedicado en el puerto 27015
 ```
 
-**Ritual de actualización:** cada vez que se sube un cambio se etiqueta la versión (`git tag vX.Y.Z`), se publica
-la release (`gh release create vX.Y.Z --verify-tag`) y se entrega el enlace
-`https://github.com/ShadowNigth/Papita/archive/refs/tags/vX.Y.Z.zip`.
+`build_all.sh` hace, en orden:
 
----
+1. `tools/fetch_sources.sh` — clona las dependencias en `.src/` y las deja en el
+   commit exacto de `pins.lock`.
+2. `tools/build_engine.sh dedicated` — compila el motor con waf y deja
+   `runtime/xash` + `runtime/filesystem_stdio.so`.
+3. `tools/build_gamedll.sh` — compila `cs_amd64.so` con CMake.
+4. `tools/assemble_gamedir.py` — coloca los assets en `game/cstrike/`.
+5. `tools/make_free_base.py` — genera un `game/valve/` mínimo y libre (paleta y
+   fuente propias) para poder arrancar sin Half-Life.
+6. `tools/smoke_test.sh` — arranca cada mapa y comprueba que el servidor queda
+   operativo.
 
-## 2. Cómo ejecutarlo
+Para jugar con **vídeo** hace falta además el cliente:
 
-### Requisitos
-- **Godot 4.4** (estable) — versión estándar, no hace falta C#.
-- Windows / Linux / macOS con GPU que soporte Forward+ (Vulkan 1.0+).
-
-### Pasos
-1. Abre Godot 4.4 → **Import** → selecciona `project.godot`.
-2. Espera el primer import (Godot registra los `class_name` y recursos).
-3. Pulsa **F5** (o el botón de play). La escena principal es `main.tscn`.
-4. En el menú: `JUGAR` → modo → mapa → bando. Para zombies: `MODO ZOMBIE` → mapa.
-
-### Exportar un ejecutable (opcional, uso personal)
-1. Instala las *Export Templates* de Godot 4.4 (`Editor → Manage Export Templates`).
-2. `Project → Export → Add → Windows/Linux/macOS`.
-3. Activa *Embed PCK* si quieres un único archivo. Exporta.
-> No distribuyas el binario: es un proyecto privado de homenaje.
-
----
-
-## 3. Controles por defecto
-
-| Acción | Tecla |
-|---|---|
-| Moverse | `W A S D` |
-| Saltar / agacharse | `Espacio` / `Ctrl` |
-| Caminar silencioso | `Shift` |
-| Disparar / mira y silenciador | Clic izquierdo / clic derecho |
-| Cambiar arma | Rueda del ratón, `1-5`, `Q` |
-| Recargar | `R` |
-| Comprar | `B` |
-| Usar / plantar / desactivar | `E` (mantener) |
-| Soltar arma | `G` |
-| Linterna | `F` |
-| Inspeccionar arma | `I` |
-| Marcador | `Tab` (mantener) |
-| Pausa | `Esc` |
-| Consola | `` ` `` |
-| Ayuda | `F1` |
-
-Todo es reasignable en **Opciones → Controles**.
-
----
-
-## 4. Estructura del proyecto
-
-```
-project.godot              Configuración, autoloads y render
-main.tscn / src/core/app.gd  Raíz: alterna menú y partida
-icon.svg                   Icono
-
-src/autoload/
-  settings.gd               Ajustes persistentes, perfil, progreso, calidad
-  i18n.gd                   Traducciones español/inglés
-  audio_bank.gd             Cache y reproducción de audio sintetizado
-  content.gd                Base de datos: armas, economía, mapas, zombies, perks
-
-src/core/
-  input_setup.gd            Acciones y reasignación de teclas
-  synth.gd                  Sintetizador DSP de todos los sonidos
-
-src/world/
-  maps.gd                   Layouts de los 10 mapas (DSL de bloques y props)
-  map_builder.gd            Geometría, ambiente, luces, props, navegación
-  nav_graph.gd              Grilla de alturas + A* con suavizado
-  mdl_loader.gd             Cargador binario y cache GPU de modelos .mdl de CS 1.5
-  material_lib.gd           Texturas PBR procedurales con mipmaps y cache
-  prop_lib.gd               Props 3D (cajas, autos, trenes, árboles, etc.)
-
-src/entities/
-  combatant.gd              Movimiento CS, armas, balística, daño, muerte
-  player.gd                 Primera persona, cámara, viewmodel, entrada
-  bot.gd                    IA de bots y de zombies
-  actor_model.gd            Modelo 3D animado de soldado/zombi
-  viewmodel.gd              Arma en primera persona (sway, recoil, ADS)
-  weapon_model.gd           Constructor 3D de las 29 armas y objetos
-  projectile.gd             Granada física (HE/flash/humo)
-  bomb.gd                   C4 con cuenta atrás y desactivación
-  pickup.gd                 Armas en el suelo
-  hostage.gd                Rehenes que siguen al CT
-
-src/game/match.gd           Director de partida: rondas, economía, objetivos, oleadas
-src/fx/fx.gd                Trazadoras, impactos, sangre, explosiones, humo
-
-src/ui/
-  menu.gd                   Menú principal + flujo + arsenal + estadísticas
-  hud.gd                    HUD en juego (mira, vida, radar, killfeed, scope)
-  ingame_ui.gd              Tienda, pausa, marcador, consola, ayuda, fin de ronda
-  options_panel.gd          Panel de opciones reutilizable
-  ui_theme.gd               Tema visual unificado
-
-shaders/                    surface, sky, water, foliage, scope
-assets/fonts/               DejaVu (licencia incluida)
-docs/                       Documentación extendida
+```bash
+sudo apt install libsdl2-dev libgl1-mesa-dev   # o el equivalente de tu distro
+./tools/build_engine.sh client
+./tools/build_client.sh
+./run_client.sh
 ```
 
-Más detalle en [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md), [`docs/ARMAS.md`](docs/ARMAS.md), [`docs/MAPAS.md`](docs/MAPAS.md), [`docs/MODO_ZOMBIE.md`](docs/MODO_ZOMBIE.md) y [`docs/AVISO_LEGAL.md`](docs/AVISO_LEGAL.md).
+## 3. El gamedir
 
----
+`game/cstrike/` es **generado**, no versionado. Se rehace con
+`tools/assemble_gamedir.py`:
 
-## 5. Consola de comandos
+```
+assets/models/cs15/p_ak47.mdl       -> cstrike/models/p_ak47.mdl
+assets/models/cs15/v_ak47_r.mdl     -> cstrike/models/v_ak47_r.mdl
+                                       cstrike/models/v_ak47.mdl     (alias)
+assets/models/cs15/player/gign/*    -> cstrike/models/player/gign/gign.mdl
+assets/models/cs15/hostage.mdl      -> cstrike/models/hostage.mdl
+assets/sounds/cs15/weapons/*.wav    -> cstrike/sound/weapons/*.wav
+assets/sounds/cs15/ui/*.wav         -> cstrike/sound/UI/*.wav
+assets/maps/cs15/de_dust2.bsp       -> cstrike/maps/de_dust2.bsp
+```
 
-`` ` `` abre la consola. Comandos: `help`, `give <arma>`, `money <n>`, `god`, `noclip`, `kill`, `heal`, `wave <n>`, `nextwave`, `map <id>`, `difficulty <0-4>`, `time <seg>`, `selftest`, `clear`, `quit`.
+Detalles que costaron encontrar y quedan resueltos en el ensamblador:
 
-`selftest` revisa en caliente la base de datos de armas y los layouts de los 10 mapas y avisa de cualquier dato que falte. Es la primera prueba que conviene lanzar si algo no arranca como esperas.
+- El motor **añade el sufijo de arquitectura** al game dll: `liblist.gam` dice
+  `dlls/cs.so` y en 64 bits busca `dlls/cs_amd64.so`.
+- Los assets de 1.5 se llaman `v_ak47_r.mdl` pero el game dll moderno precachea
+  `v_ak47.mdl`: se crean 26 alias (mismo inodo, coste cero).
+- `sound/ui` pasa a `sound/UI` por la sensibilidad a mayúsculas del sistema de
+  ficheros de GoldSrc.
 
----
+## 4. Verificación incluida
 
-## 6. Decisiones técnicas
+```bash
+python3 tools/cs15_audit.py          # valida los binarios de assets/
+./tools/smoke_test.sh                # arranca el servidor con los 10 mapas
+```
 
-- **Sin assets externos**: todo el contenido se genera en runtime. El repositorio pesa poco y no hay problemas de licencias.
-- **Texturas PBR**: ruido celular/Worley + grano + normal por derivadas de altura + ORM, con triplanar en world space para que no se estiren las paredes.
-- **Navegación**: en vez de hornear NavMesh (lento y frágil con geometría procedural), se muestrea el mundo con rayos y se construye una grilla de alturas con A* y suavizado por línea de visión.
-- **Audio**: síntesis DSP (ruido filtrado, senos/sierras con envolventes, reverb de peine, saturación) y construcción en un `Thread` para evitar tirones.
-- **Rendimiento**: límite de luces con sombras, partículas acotadas, materiales cacheados por tipo/variante y actualización de HUD por dibujo inmediato (`_draw`).
+Resultados reales en este repositorio:
 
-## 7. Estado y limitaciones conocidas
+```
+modelos: 96 (0 con avisos)   mapas: 10 (0 con avisos)   sonidos: 352
+OK  cs_assault / cs_estate / cs_italy / cs_office
+OK  de_aztec / de_dust / de_dust2 / de_inferno / de_nuke / de_train
+10 mapas OK, 0 con fallo
+```
 
-- **Aún no se ha ejecutado dentro del motor**: el proyecto se escribió y se validó de forma estática (parser de GDScript, formato, comprobaciones de API) en un entorno sin Godot instalado. La primera vez que lo abras pueden aparecer avisos menores; están anotados abajo.
-- El arte es una interpretación estilizada (low-poly procedural), no modelos fotorrealistas.
-- Los bots juegan los objetivos y combaten, pero no ejecutan estrategias de equipo avanzadas ni *smoke lineups*.
-- Sin multijugador en red: es un proyecto para jugar solo contra bots (tal como se pidió).
-- El modo espectador es básico: al morir se observa desde el cadáver hasta la siguiente ronda.
-- La primera carga del mapa genera texturas y navegación; puede tardar unos segundos según la CPU.
+`cs15_audit.py` no se fía del README: lee los binarios y comprueba el magic
+`IDST`/versión 10 de los `.mdl` (con sus texturas embebidas), los 15 lumps y las
+entidades jugables de los `.bsp`, y el formato RIFF de los 352 `.wav`.
 
-## 8. Aviso legal
+## 5. Lo que falta y se nota
 
-Counter-Strike y sus marcas pertenecen a Valve Corporation. Este es un proyecto **privado, no comercial y no distribuido**, hecho como homenaje y ejercicio técnico. No contiene código, mapas, modelos, texturas ni sonidos originales de Valve.
+Honestidad por delante, porque son las cosas que vas a ver al primer arranque:
+
+1. **Recursos del Half-Life base.** El motor pide `valve/gfx.wad`,
+   `valve/gfx/palette.lmp`, sprites de efectos (`sprites/*.spr`) y gibs
+   (`models/hgibs.mdl`, `*gibs.mdl`). No están en el repositorio ni deben
+   redistribuirse. Dos salidas:
+   ```bash
+   python3 tools/bootstrap_valve.py --source "/ruta/Half-Life/valve"   # fiel
+   python3 tools/make_free_base.py                                     # paleta propia
+   ```
+   Con la base libre los mapas cargan, pero los colores no son los de 1999
+   porque la paleta de 256 colores es una aproximación generada.
+2. **Reglas 1.6.** ReGameDLL implementa el 1.6. `config/server.cfg` fija los
+   valores del 1.5 (35 s de C4, 15 s de compra, 800 $ iniciales, física de
+   800/10/10...) pero el menú de compra del cliente sí ofrece **FAMAS, Galil y
+   escudo**, que en 1.5 no existían: al comprarlos fallará el modelo, porque no
+   hay `models/p_famas.mdl` ni `models/p_galil.mdl`. No se inventan: se avisa.
+3. **Sprites del HUD.** Los iconos de arma, el radar y el humo son `.spr` del
+   CS original, que no están en `assets/`. Sin ellos la consola avisa y el HUD
+   pierde iconos.
+4. **Cliente sin probar aquí.** `cs16-client` necesita SDL2 y OpenGL; este
+   entorno no los tiene. La receta está escrita y es la misma que usa la
+   comunidad, pero no la he ejecutado.
+5. **Bots.** ReGameDLL trae los bots de CS integrados (`bot_add`, `bot_quota`)
+   pero **no** hay ficheros `.nav` por mapa: hay que ejecutar `nav_generate`
+   una vez por mapa desde el juego.
+
+## 6. Estructura
+
+```
+assets/                modelos, sonidos y mapas originales (material de Valve)
+config/                liblist.gam, server.cfg, autoexec.cfg, config.cfg...
+engine/pins.lock       revisión exacta de cada dependencia
+tools/                 fetch, build, assemble, audit, smoke test, bootstrap
+runtime/               binarios compilados (generado)
+game/                  gamedir cstrike + valve (generado)
+docs/                  compilación, assets, arquitectura, aviso legal
+legacy/godot/          la versión anterior del proyecto, en Godot 4
+```
+
+`legacy/godot/` conserva íntegro el intento previo (34 scripts GDScript,
+~20 500 líneas, shaders y loaders propios). No se borró porque es trabajo real y
+sirve de referencia, pero **no es el proyecto activo**.
+
+## 7. Documentación
+
+- [`docs/COMPILAR.md`](docs/COMPILAR.md) — requisitos, compilación paso a paso, problemas conocidos.
+- [`docs/ASSETS.md`](docs/ASSETS.md) — qué asset hay, qué formato tiene y de dónde falta.
+- [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) — cómo encajan motor, game dll, cliente y gamedir.
+- [`docs/AVISO_LEGAL.md`](docs/AVISO_LEGAL.md) — licencias y por qué los assets no se publican.
+
+## 8. Licencia
+
+El **código propio** de este repositorio (scripts de `tools/`, configuración y
+documentación) se publica bajo **GPLv3** (ver [`LICENSE`](LICENSE)), en
+coherencia con Xash3D-FWGS. Cada dependencia mantiene su licencia, resumida en
+[`NOTICE.md`](NOTICE.md).
+
+Los **assets** (`.mdl`, `.bsp`, `.wav`) son propiedad de Valve Corporation y
+**no** están cubiertos por esa licencia ni se distribuyen con el proyecto.
