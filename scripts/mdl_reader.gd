@@ -486,25 +486,32 @@ func _anadir_superficie_animada(malla: ArrayMesh, numtris: int, triindex: int,
 			idx.append(datos.decode_s16(o))
 			uvs.append(Vector2(datos.decode_s16(o + 4) / ancho, datos.decode_s16(o + 6) / alto))
 		pos += n * 8
+		# `tri` guarda índices locales del comando, no índices de vértice:
+		# así cada UV sigue emparejada con su vértice al expandir tiras/fans.
 		var tri := PackedInt32Array()
 		if cnt < 0:
 			for k in range(1, n - 1):
-				tri.append_array(PackedInt32Array([idx[0], idx[k], idx[k + 1]]))
+				tri.append_array(PackedInt32Array([0, k, k + 1]))
 				hechos += 1
 		else:
 			for k in range(2, n):
 				if k % 2 == 0:
-					tri.append_array(PackedInt32Array([idx[k - 2], idx[k - 1], idx[k]]))
+					tri.append_array(PackedInt32Array([k - 2, k - 1, k]))
 				else:
-					tri.append_array(PackedInt32Array([idx[k - 1], idx[k - 2], idx[k]]))
+					tri.append_array(PackedInt32Array([k - 1, k - 2, k]))
 				hechos += 1
 		for t in range(0, tri.size(), 3):
-			var a: int = tri[t]
-			var bb: int = tri[t + 1]
-			var cc: int = tri[t + 2]
+			var ia: int = tri[t]
+			var ib: int = tri[t + 1]
+			var ic: int = tri[t + 2]
+			var a: int = idx[ia]
+			var bb: int = idx[ib]
+			var cc: int = idx[ic]
 			if minf(minf(a, bb), cc) < 0 or maxf(maxf(a, bb), cc) >= numverts:
 				continue
-			for vi: int in [a, bb, cc]:
+			for esquina in range(3):
+				var indice_uv: int = tri[t + esquina]
+				var vi: int = idx[indice_uv]
 				var o: int = vertindex + vi * 12
 				var v := Vector3(datos.decode_float(o), datos.decode_float(o + 4), datos.decode_float(o + 8))
 				var hueso := 0
@@ -515,7 +522,7 @@ func _anadir_superficie_animada(malla: ArrayMesh, numtris: int, triindex: int,
 					v = bind_pose[hueso] * v
 				st.set_bones(PackedInt32Array([hueso, 0, 0, 0]))
 				st.set_weights(PackedFloat32Array([1.0, 0.0, 0.0, 0.0]))
-				st.set_uv(uvs[vi])
+				st.set_uv(uvs[indice_uv])
 				st.add_vertex(v)
 				agregados += 1
 	if agregados == 0:
