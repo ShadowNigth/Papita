@@ -52,8 +52,12 @@ func equipar(fichero: String) -> void:
 		modelo.mesh = null
 		return
 	modelo.mesh = lector.construir_malla()
+	# Los v_*.mdl llevan la profundidad en -Y. Primero se convierte el StudioModel
+	# Z-up a la camara Y-up y luego se gira 180 grados para que -Y mire por -Z,
+	# hacia delante; sin esa orientacion el arma queda detras de la camara.
+	modelo.quaternion = Quaternion(Vector3.UP, PI) * Quaternion(Vector3.RIGHT, -PI * 0.5)
 	modelo.scale = Vector3.ONE * ESCALA_VISTA
-	modelo.rotation_degrees = Vector3.ZERO
+	modelo.position = Vector3.ZERO
 	# El viewmodel se dibuja por delante del mundo (como en GoldSrc).
 	modelo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	modelo.set_layer_mask_value(1, false)

@@ -74,6 +74,7 @@ func _ready() -> void:
 	camara.position = Vector3(0, ALTURA_OJOS, 0)
 	camara.fov = 90.0
 	camara.near = 0.02
+	camara.set_cull_mask_value(20, true)
 	add_child(camara)
 
 	viewmodel = CsViewmodel.new()

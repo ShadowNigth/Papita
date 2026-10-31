@@ -62,4 +62,8 @@ fi
 # convertir GoldSrc a Godot, deben medir entre 1,5 y 1,95 m de alto.
 run_godot escala_modelos --script res://tools/godot_actor_validate.gd
 
+# Prueba de integracion jugable: HUD/menu a tamano de viewport, arma delante
+# de la camara y acciones de movimiento que desplazan al jugador.
+run_godot jugabilidad --script res://tools/godot_playability_validate.gd
+
 echo "Prueba headless de Godot completada sin errores."

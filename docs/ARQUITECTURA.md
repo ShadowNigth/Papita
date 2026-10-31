@@ -45,9 +45,10 @@ arrancar. Nada que reimportar.
 
 **Geometría `unshaded` + lightmap.** El original no tenía luces dinámicas: toda
 la iluminación está horneada en el `.bsp`. Replicarlo da el aspecto correcto y
-cuesta cero en rendimiento. El shader hace `pow(color, 2.2)` para pasar de sRGB
-a lineal antes de multiplicar por la luz, y el lightmap se multiplica por 2.2
-porque los valores de 1999 vienen ya "brillantes".
+cuesta cero en rendimiento. Los samplers `source_color` convierten la textura y
+el lightmap de sRGB a lineal; no se les aplica un segundo `pow`, porque oscurece
+el mapa. El lightmap se multiplica por 2.2 para compensar la escala de sus
+valores de 1999.
 
 **Una superficie por textura.** Un mapa tiene ~5000 caras y ~150 texturas; con
 una superficie por cara serían 5000 draw calls. Agrupando por textura baja a

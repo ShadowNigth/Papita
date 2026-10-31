@@ -24,7 +24,17 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fuente = ThemeDB.fallback_font
 	visible = false
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	_ajustar_a_viewport()
+	get_viewport().size_changed.connect(_ajustar_a_viewport)
+
+
+## El menu tambien cuelga de un CanvasLayer, no de otro Control. Sin un tamano
+## explicito, el panel se dibuja centrado en (0, 0), fuera de la pantalla.
+func _ajustar_a_viewport() -> void:
+	set_anchors_preset(Control.PRESET_TOP_LEFT)
+	position = Vector2.ZERO
+	size = get_viewport_rect().size
+	queue_redraw()
 
 
 func alternar() -> void:

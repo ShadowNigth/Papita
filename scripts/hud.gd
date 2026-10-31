@@ -26,9 +26,20 @@ var _tiempo_mensaje: float = 0.0
 
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fuente = ThemeDB.fallback_font
+	_ajustar_a_viewport()
+	get_viewport().size_changed.connect(_ajustar_a_viewport)
+
+
+## CanvasLayer no es un Control: sus hijos no reciben un rectangulo padre para
+## resolver los anchors. Se fija el tamano del viewport explicitamente, o el HUD
+## calcula centro y esquinas desde (0, 0) y queda recortado en la esquina.
+func _ajustar_a_viewport() -> void:
+	set_anchors_preset(Control.PRESET_TOP_LEFT)
+	position = Vector2.ZERO
+	size = get_viewport_rect().size
+	queue_redraw()
 
 
 func aviso(texto: String, segundos: float = 3.0) -> void:

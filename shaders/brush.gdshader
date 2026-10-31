@@ -11,11 +11,10 @@ uniform float brillo = 1.0;
 
 void fragment() {
 	vec4 albedo = texture(albedo_tex, UV);
-	// Las texturas de GoldSrc llevan el color "quemado" (sin gamma); se pasa a
-	// espacio lineal para que el tonemap de Godot no las lave.
-	vec3 base = pow(albedo.rgb, vec3(2.2));
+	// `source_color` ya convierte sRGB a lineal. Aplicar otro pow(2.2) aqui
+	// hacia una doble conversion y dejaba las superficies casi negras.
 	vec3 luz = texture(lightmap_tex, UV2).rgb * intensidad_luz;
-	ALBEDO = base * luz * brillo;
+	ALBEDO = albedo.rgb * luz * brillo;
 }
 
 void light() {

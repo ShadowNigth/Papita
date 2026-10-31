@@ -418,9 +418,14 @@ func _crear_acciones() -> void:
 		for tecla in mapa[accion]:
 			if tecla == KEY_NONE:
 				continue
-			var ev := InputEventKey.new()
-			ev.physical_keycode = tecla
-			InputMap.action_add_event(accion, ev)
+			# Registra ambas variantes: posicion fisica WASD y letra logica. Si se
+			# ponen las dos propiedades en un solo evento, Godot prioriza keycode.
+			var ev_fisica := InputEventKey.new()
+			ev_fisica.physical_keycode = tecla
+			InputMap.action_add_event(accion, ev_fisica)
+			var ev_logica := InputEventKey.new()
+			ev_logica.keycode = tecla
+			InputMap.action_add_event(accion, ev_logica)
 	# El boton izquierdo se anade siempre: "disparar" ya existe (creada arriba
 	# sin teclas), asi que comprobar has_action() antes seria un no-op.
 	var raton := InputEventMouseButton.new()
