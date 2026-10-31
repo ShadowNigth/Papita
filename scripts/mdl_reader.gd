@@ -30,6 +30,7 @@ var huesos: Array[Dictionary] = []
 var secuencias: Array[Dictionary] = []
 var texturas: Array[Dictionary] = []
 var bind_pose: Array[Transform3D] = []
+var bind_pose_local: Array[Transform3D] = []
 
 var numbodyparts: int = 0
 var bodypartindex: int = 0
@@ -78,6 +79,7 @@ func _leer() -> void:
 
 	_leer_huesos(numbones, boneindex)
 	_calcular_bind_pose()
+	_construir_poses_locales()
 	_leer_secuencias(numseq, seqindex)
 	_leer_texturas(numtex, textureindex)
 
@@ -87,11 +89,17 @@ func _leer_huesos(n: int, base0: int) -> void:
 		var b := base0 + i * 112
 		if b + 112 > datos.size():
 			break
+		var pos := Vector3(datos.decode_float(b + 64), datos.decode_float(b + 68), datos.decode_float(b + 72))
+		var rot := Vector3(datos.decode_float(b + 76), datos.decode_float(b + 80), datos.decode_float(b + 84))
+		var esc := Vector3(datos.decode_float(b + 88), datos.decode_float(b + 92), datos.decode_float(b + 96))
+		var esc_rot := Vector3(datos.decode_float(b + 100), datos.decode_float(b + 104), datos.decode_float(b + 108))
 		huesos.append({
 			"nombre": datos.slice(b, b + 32).get_string_from_ascii(),
 			"padre": datos.decode_s32(b + 32),
-			"pos": Vector3(datos.decode_float(b + 64), datos.decode_float(b + 68), datos.decode_float(b + 72)),
-			"rot": Vector3(datos.decode_float(b + 76), datos.decode_float(b + 80), datos.decode_float(b + 84)),
+			"pos": pos,
+			"rot": rot,
+			"esc_pos": esc,
+			"esc_rot": esc_rot,
 		})
 
 
@@ -114,10 +122,15 @@ func _leer_secuencias(n: int, base0: int) -> void:
 		var b := base0 + i * 176
 		if b + 176 > datos.size():
 			break
+		# mstudioseqdesc_t (176 B): label[32] fps@32 flags@36 activity@40 ...
+		# numframes@56 ... numblends@120 animindex@124 (offset absoluto)
 		secuencias.append({
 			"nombre": datos.slice(b, b + 32).get_string_from_ascii(),
 			"fps": datos.decode_float(b + 32),
-			"cuadros": datos.decode_s32(b + 36),
+			"flags": datos.decode_s32(b + 36),
+			"cuadros": datos.decode_s32(b + 56),
+			"blends": datos.decode_s32(b + 120),
+			"animindex": datos.decode_s32(b + 124),
 		})
 
 
@@ -263,6 +276,278 @@ func _emitir(st: SurfaceTool, vertices: PackedVector3Array, uvs: PackedVector2Ar
 		st.set_uv(par[1])
 		st.add_vertex(vertices[par[0]])
 	return 3
+
+
+
+# ---------------------------------------------------------------------------
+# Animacion: equivale a R_StudioCalcBones + SV_StudioSetupBones del motor.
+# ---------------------------------------------------------------------------
+
+## Lee un canal RLE de animacion y devuelve los dos valores a interpolar.
+## Port literal de R_StudioCalcBones (public/xash3d_mathlib.c de Xash3D).
+func _canal(base: int, cuadro: int) -> Vector2i:
+	if base < 0 or base + 2 > datos.size():
+		return Vector2i.ZERO
+	var pos := base
+	var valid := datos[pos]
+	var total := datos[pos + 1]
+	var j := cuadro
+	if total < valid:
+		j = 0
+	while total <= j and pos + 2 < datos.size():
+		j -= total
+		pos += (valid + 1) * 2
+		if pos + 2 > datos.size():
+			return Vector2i.ZERO
+		valid = datos[pos]
+		total = datos[pos + 1]
+		if total < valid:
+			j = 0
+
+	var v1 := 0
+	var v2 := 0
+	if valid > j:
+		v1 = _short(pos + (j + 1) * 2)
+		if valid > j + 1:
+			v2 = _short(pos + (j + 2) * 2)
+		elif total > j + 1:
+			v2 = v1
+		else:
+			v2 = _short(pos + (valid + 2) * 2)
+	else:
+		v1 = _short(pos + valid * 2)
+		if total > j + 1:
+			v2 = v1
+		else:
+			v2 = _short(pos + (valid + 2) * 2)
+	return Vector2i(v1, v2)
+
+
+func _short(pos: int) -> int:
+	if pos < 0 or pos + 2 > datos.size():
+		return 0
+	return datos.decode_s16(pos)
+
+
+## Valor (posicion o rotacion) de un canal de un hueso, interpolado.
+## Devuelve (valor_cuadro_a, valor_cuadro_b) en unidades del modelo / radianes.
+func _canal_hueso(hueso: int, panim: int, canal: int, cuadro: int) -> Vector2:
+	var off := datos.decode_u16(panim + canal * 2)
+	var h: Dictionary = huesos[hueso]
+	var base: float = 0.0
+	var escala: float = 1.0
+	if canal < 3:
+		base = (h["pos"] as Vector3)[canal]
+		escala = (h["esc_pos"] as Vector3)[canal]
+	else:
+		base = (h["rot"] as Vector3)[canal - 3]
+		escala = (h["esc_rot"] as Vector3)[canal - 3]
+	if off == 0:
+		return Vector2(base, base)
+	var crudo := _canal(panim + off, cuadro)
+	return Vector2(base + crudo.x * escala, base + crudo.y * escala)
+
+
+## Cuaternion desde (pitch, yaw, roll) EN RADIANES, como AngleQuaternion(studio=true).
+static func _cuaternion(angulos: Vector3) -> Quaternion:
+	var sp := sin(angulos.x * 0.5)
+	var cp := cos(angulos.x * 0.5)
+	var sy := sin(angulos.y * 0.5)
+	var cy := cos(angulos.y * 0.5)
+	var sr := sin(angulos.z * 0.5)
+	var cr := cos(angulos.z * 0.5)
+	return Quaternion(
+		sr * cp * cy - cr * sp * sy,
+		cr * sp * cy + sr * cp * sy,
+		cr * cp * sy - sr * sp * cy,
+		cr * cp * cy + sr * sp * sy)
+
+
+## Transform LOCAL de cada hueso para la secuencia y el cuadro (con decimales).
+## El resultado se aplica con `Skeleton3D.set_bone_pose`.
+func pose(secuencia: int, cuadro: float) -> Array[Transform3D]:
+	var salida: Array[Transform3D] = []
+	if secuencia < 0 or secuencia >= secuencias.size() or huesos.is_empty():
+		return bind_pose_local.duplicate()
+
+	var desc: Dictionary = secuencias[secuencia]
+	var total := maxi(1, int(desc["cuadros"]))
+	var f := fmod(maxf(cuadro, 0.0), float(total))
+	var entero := int(f)
+	var s := f - float(entero)
+	var tabla := int(desc["animindex"])
+
+	for i in huesos.size():
+		var h: Dictionary = huesos[i]
+		var panim := tabla + i * 12           # un mstudioanim_t (6 uint16) por hueso
+		if tabla <= 0 or panim + 12 > datos.size():
+			salida.append(bind_pose_local[i] if i < bind_pose_local.size() else Transform3D())
+			continue
+		# Se recogen los pares (cuadro A, cuadro B) de los 6 canales: 3 de
+		# posicion y 3 de rotacion, todos en el mismo orden que el motor.
+		var pa := PackedFloat32Array()
+		var pb := PackedFloat32Array()
+		var ra := PackedFloat32Array()
+		var rb := PackedFloat32Array()
+		for c in 3:
+			var v := _canal_hueso(i, panim, c, entero)
+			pa.append(v.x)
+			pb.append(v.y)
+			var w := _canal_hueso(i, panim, c + 3, entero)
+			ra.append(w.x)
+			rb.append(w.y)
+		var pos_a := Vector3(pa[0], pa[1], pa[2])
+		var pos_b := Vector3(pb[0], pb[1], pb[2])
+		var rot_a := _cuaternion(Vector3(ra[0], ra[1], ra[2]))
+		var rot_b := _cuaternion(Vector3(rb[0], rb[1], rb[2]))
+		salida.append(Transform3D(Basis(rot_a.slerp(rot_b, s)), pos_a.lerp(pos_b, s)))
+	return salida
+
+
+## Poses locales de reposo (una por hueso), para el Skeleton3D.
+func _construir_poses_locales() -> void:
+	bind_pose_local.clear()
+	for h in huesos:
+		bind_pose_local.append(Transform3D(Basis(_cuaternion(h["rot"])), h["pos"]))
+
+
+## Esqueleto listo para Godot, con la misma jerarquia que el .mdl.
+func construir_esqueleto() -> Skeleton3D:
+	var esq := Skeleton3D.new()
+	if bind_pose_local.is_empty():
+		_construir_poses_locales()
+	for i in huesos.size():
+		var h: Dictionary = huesos[i]
+		esq.add_bone(String(h["nombre"]))
+		esq.set_bone_parent(i, int(h["padre"]))
+		esq.set_bone_rest(i, bind_pose_local[i])
+		esq.reset_bone_pose(i)
+	return esq
+
+
+## Malla con huesos y pesos por vertice (1 hueso por vertice, como el original).
+## Los vertices van en espacio de modelo en reposo: `create_skin_from_rest_transforms`
+## calcula los binds a partir de ahi y Godot hace el skinning en la GPU.
+func construir_malla_animada() -> ArrayMesh:
+	var malla := ArrayMesh.new()
+	if datos.is_empty():
+		return malla
+	for bp in mini(numbodyparts, 32):
+		var b := bodypartindex + bp * 76
+		if b + 76 > datos.size():
+			continue
+		var nummodels := datos.decode_s32(b + 64)
+		var modelindex := datos.decode_s32(b + 72)
+		for mo in mini(nummodels, 32):
+			var mbase := modelindex + mo * 112
+			if mbase + 112 > datos.size():
+				continue
+			var nummesh := datos.decode_s32(mbase + 72)
+			var meshindex := datos.decode_s32(mbase + 76)
+			var numverts := datos.decode_s32(mbase + 80)
+			var vertinfo := datos.decode_s32(mbase + 84)
+			var vertindex := datos.decode_s32(mbase + 88)
+			if numverts <= 0 or numverts > 65535 or vertindex + numverts * 12 > datos.size():
+				continue
+			for m in mini(nummesh, 256):
+				var mb := meshindex + m * 20
+				if mb + 20 > datos.size():
+					continue
+				_anadir_superficie_animada(malla, datos.decode_s32(mb), datos.decode_s32(mb + 4),
+					vertindex, vertinfo, numverts, datos.decode_s32(mb + 8))
+	return malla
+
+
+func _anadir_superficie_animada(malla: ArrayMesh, numtris: int, triindex: int,
+		vertindex: int, vertinfo: int, numverts: int, skinref: int) -> void:
+	if triindex <= 0 or triindex >= datos.size() or numtris <= 0:
+		return
+	var tex: Dictionary = {}
+	if not texturas.is_empty():
+		tex = texturas[clampi(skinref, 0, texturas.size() - 1)]
+	var ancho: float = maxf(1.0, float(tex.get("ancho", 1)))
+	var alto: float = maxf(1.0, float(tex.get("alto", 1)))
+
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+
+	var pos := triindex
+	var hechos := 0
+	var agregados := 0
+	while hechos < numtris and pos + 2 <= datos.size():
+		var cnt := datos.decode_s16(pos)
+		pos += 2
+		if cnt == 0:
+			break
+		var n := absi(cnt)
+		if n < 3 or pos + n * 8 > datos.size():
+			break
+		var idx := PackedInt32Array()
+		var uvs := PackedVector2Array()
+		for k in n:
+			var o := pos + k * 8
+			idx.append(datos.decode_s16(o))
+			uvs.append(Vector2(datos.decode_s16(o + 4) / ancho, datos.decode_s16(o + 6) / alto))
+		pos += n * 8
+		var tri := PackedInt32Array()
+		if cnt < 0:
+			for k in range(1, n - 1):
+				tri.append_array(PackedInt32Array([idx[0], idx[k], idx[k + 1]]))
+				hechos += 1
+		else:
+			for k in range(2, n):
+				if k % 2 == 0:
+					tri.append_array(PackedInt32Array([idx[k - 2], idx[k - 1], idx[k]]))
+				else:
+					tri.append_array(PackedInt32Array([idx[k - 1], idx[k - 2], idx[k]]))
+				hechos += 1
+		for t in range(0, tri.size(), 3):
+			var a := tri[t]
+			var bb := tri[t + 1]
+			var cc := tri[t + 2]
+			if minf(minf(a, bb), cc) < 0 or maxf(maxf(a, bb), cc) >= numverts:
+				continue
+			for vi in [a, bb, cc]:
+				var o := vertindex + vi * 12
+				var v := Vector3(datos.decode_float(o), datos.decode_float(o + 4), datos.decode_float(o + 8))
+				var hueso := 0
+				if vertinfo + vi < datos.size():
+					hueso = datos[vertinfo + vi]
+				# a espacio de modelo en reposo (el Skin se encarga del resto)
+				if hueso < bind_pose.size():
+					v = bind_pose[hueso] * v
+				st.set_bones(PackedInt32Array([hueso, 0, 0, 0]))
+				st.set_weights(PackedFloat32Array([1.0, 0.0, 0.0, 0.0]))
+				st.set_uv(uvs[vi])
+				st.add_vertex(v)
+				agregados += 1
+
+	if agregados == 0:
+		return
+	st.generate_normals()
+	malla.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, st.commit_to_arrays())
+
+	var material := StandardMaterial3D.new()
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	material.roughness = 0.9
+	if tex.get("imagen") != null:
+		material.albedo_texture = ImageTexture.create_from_image(tex["imagen"] as Image)
+	malla.surface_set_material(malla.get_surface_count() - 1, material)
+
+
+func indice_secuencia(nombre: String) -> int:
+	for i in secuencias.size():
+		if String(secuencias[i]["nombre"]) == nombre:
+			return i
+	return -1
+
+
+func lista_secuencias() -> PackedStringArray:
+	var salida := PackedStringArray()
+	for s in secuencias:
+		salida.append(String(s["nombre"]))
+	return salida
 
 
 func caja() -> AABB:

@@ -23,21 +23,26 @@ Lo más probable que haya que tocar en la primera ejecución:
   solución es volcar el lightmap a `PackedByteArray` y crear la `Image` de una
   vez.
 
-## 2. Animaciones de los modelos
+## 2. Animaciones: hechas, pero sin mezcla
 
-Se leen las secuencias (nombre, fps, cuadros) pero **no se reproducen**: los
-soldados se dibujan en bind pose (T-pose). Para animarlos hace falta:
+El decodificador y el skinning están terminados y verificados (ver
+`docs/ANIMACIONES.md`): las secuencias se reproducen con los datos originales.
 
-1. Leer `mstudioanim_t` y los `mstudioanimvalue_t` (valores RLE de 16 bits).
-2. Interpolar posiciones/rotaciones por hueso y cuadro.
-3. Aplicar la matriz resultante a los vértices (igual que la bind pose actual).
+Lo que falta para que se vean *bien* en juego:
 
-El jugador en primera persona no lo necesita (solo se ve el arma), pero los
-bots sí.
+- **Mezcla (blending) de 9 blends de arma**: `ref_aim_ak47` tiene `numblends=9`
+  (una pose por arma). Ahora mismo se usa el blend 0, así que el soldado sujeta
+  el arma en la pose genérica, no la del arma que lleva.
+- **Transiciones suaves** entre secuencias: ahora el cambio es instantáneo
+  (`cambiar de walk a idle` salta). Falta interpolar entre poses 0,1-0,3 s.
+- **Eventos de animación** (`mstudioevent_t`): el motor los usa para disparar
+  sonidos de paso y destellos de boca de cañón en el cuadro exacto.
+- **`linear movement`** (desplazamiento de raíz) para animaciones de muerte.
 
 ## 3. Bots
 
-No hay bots. `legacy/xash/` sí los tenía (los de ReGameDLL); aquí habría que
+Los actores que deambulan por el mapa **no son IA**: se mueven en línea recta
+entre puntos de aparición y pueden atravesar paredes. No hay navegación. `legacy/xash/` sí los tenía (los de ReGameDLL); aquí habría que
 escribir navegación propia. La opción razonable es usar los `clipnodes` y las
 hojas del `.bsp` para construir un grafo de puntos de navegación, en vez de
 inventar un NavMesh sobre geometría ya particionada.
@@ -78,5 +83,7 @@ Half-Life se resuelve copiando el fichero.
 
 - Lectura de los 15 lumps del `.bsp` en los 10 mapas, sin errores.
 - Lectura de mallas, huesos y texturas en los 96 modelos, sin errores.
+- Animación de esqueleto (RLE + slerp + skinning GPU) y 215 secuencias
+  comprobadas con movimiento real.
 - Render de validación (planos de mapas y vistas de modelos) en `docs/previews/`.
 - Comprobación de la API de Godot 4.4 en los 11 scripts.

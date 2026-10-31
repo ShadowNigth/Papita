@@ -63,6 +63,18 @@ se siente bien": son `sv_accelerate`, `sv_friction`, `sv_airaccelerate`,
 `sv_stopspeed` y las velocidades de CS 1.5, convertidas a metros. Es lo que hace
 que moverse se parezca al original.
 
+## Animación
+
+Los modelos no se reconstruyen por cuadro: `mdl_reader.gd` crea un
+`Skeleton3D` con los 53 huesos del `.mdl` y sube la malla una sola vez con
+`bones`/`weights` por vértice (un hueso por vértice, como el original). Cada
+cuadro, `pose()` decodifica los canales RLE y devuelve una `Transform3D` local
+por hueso que se aplica con `set_bone_pose()`; el `Skin` lo resuelve en la GPU.
+
+`actor_model.gd` es el nodo que encadena eso con el estado del juego:
+`animar_por_velocidad()` elige entre `idle1`, `walk`, `crouchrun` y `run` según
+los metros por segundo, y `morir()` reproduce una de las tres muertes.
+
 ## Los tres niveles de verificación
 
 Este proyecto no se pudo ejecutar en el entorno donde se escribió, así que se

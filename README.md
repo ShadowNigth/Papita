@@ -21,6 +21,7 @@ spawns y el círculo naranja el sitio de bomba A/B.*
 |---|---|
 | Lector `.bsp` v30 (geometría, texturas, lightmaps, entidades) | **validado** contra los 10 mapas |
 | Lector `.mdl` v10 (mallas, huesos, bind pose, secuencias) | **validado** contra los 96 modelos |
+| Animación de esqueletos (RLE, interpolación, skinning GPU) | **validado**: 215 secuencias con movimiento real |
 | Construcción del mapa en Godot (malla + colisión + atlas de luz) | escrito, **sin ejecutar** |
 | Jugador, armas, audio, HUD | escrito, **sin ejecutar** |
 | Compilar el motor Godot | **no disponible en el entorno donde se escribió** |
@@ -71,12 +72,37 @@ disparar, `R` recargar, `1-5` armas, `Rueda` cambiar de arma, `F1` ayuda,
 - **Colisión**: `ConcavePolygonShape3D` con los mismos triángulos.
 - **Entidades**: spawns, sitios de bomba y rehenes leídos del lump de entidades.
 
-### Modelos
+### Modelos y animación
 - Mallas por superficie, con la textura embebida en el propio `.mdl`.
-- Esqueleto completo: se compone la jerarquía de huesos en bind pose y se
-  transforma cada vértice por el hueso al que pertenece (`vertinfo`).
-- Se leen las secuencias (nombre, fps, cuadros) — reproducirlas es lo siguiente
-  pendiente.
+- Esqueleto completo: 53 huesos por soldado, con la jerarquía del `.mdl`.
+- **Animación real**: se decodifican los canales RLE del formato
+  (`mstudioanim_t` + `mstudioanimvalue_t`), se interpola posición y se hace
+  *slerp* de cuaterniones, exactamente como `R_StudioCalcBones` del motor.
+- **Skinning en GPU**: `Skeleton3D` + `Skin` con un hueso por vértice (que es lo
+  que usa el original). Animar cuesta 53 transformaciones por actor, no
+  reescribir 800 vértices.
+- Se reproducen las secuencias originales: `idle1`, `walk`, `run`, `crouchrun`,
+  `crouch_idle`, `death1-3`, `ref_shoot_*`... Un ciclo de caminado de 30 fps dura
+  33 cuadros porque así lo comprimió Valve en 1999.
+
+![ciclo de caminado del GIGN](docs/previews/anim_gign_walk.gif)
+
+*`walk` del GIGN, 33 cuadros a 30 fps, leídos del `.mdl` original.*
+
+![carrera del terrorista](docs/previews/anim_terror_run.gif)
+
+*`run` del terrorista, 37 cuadros a 60 fps, con la pose de fusil.*
+
+Al arrancar se colocan **4 soldados animados** de las facciones originales
+(`gign`, `sas`, `urban`, `gsg9`, `terror`, `leet`, `arctic`, `guerilla`) que
+deambulan por el mapa cambiando entre `idle1`, `walk` y `run` según su
+velocidad. Es una demostración de animación, no IA: se mueven en línea recta y
+pueden atravesar paredes (`docs/PENDIENTE.md`).
+
+```bash
+godot --path . -- --actores 12 --secuencia run   # 12 soldados corriendo
+godot --path . -- --actores 0                    # sin actores
+```
 
 ### Movimiento
 Constantes del motor original, en unidades GoldSrc convertidas a metros:
@@ -154,13 +180,19 @@ Salida actual:
 
 ```
 modelos: 96/96 sin problemas     mapas: 10/10 ok     problemas de formato: 0
-11 scripts revisados, 0 problemas
+animaciones: 215/261 secuencias evaluadas se mueven (0 problemas)
+12 scripts revisados, 0 problemas
 ```
+
+Las 46 secuencias que no se mueven son las **poses de apuntado** (`ref_aim_*`,
+`crouch_aim_*`): tienen 1-2 cuadros idénticos porque el juego las mezcla con
+los *blends* de arma, y los modelos de arma (`p_*`, `w_*`), que no se animan.
 
 ## 7. Documentación
 
 - [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) — cómo se lee cada formato y por qué.
 - [`docs/PENDIENTE.md`](docs/PENDIENTE.md) — qué falta, por orden de importancia.
+- [`docs/ANIMACIONES.md`](docs/ANIMACIONES.md) — el formato de animación y cómo se reproduce.
 - [`docs/FORMATOS.md`](docs/FORMATOS.md) — los structs del `.bsp` y del `.mdl`, campo a campo.
 - [`docs/AVISO_LEGAL.md`](docs/AVISO_LEGAL.md) — licencias y qué no se publica.
 

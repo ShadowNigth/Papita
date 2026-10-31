@@ -183,13 +183,29 @@ mayoría de los modelos de CS 1.5 son en realidad BMP de 8 bits con su propia
 tabla de color... salvo que el motor los convierta con `palette.lmp`. En este
 proyecto se usa la misma paleta que para los mapas.
 
-## 3. Escala y ejes
+## 3. Animación
+
+`mstudioseqdesc_t` (176 B) y `mstudioanim_t` (12 B por hueso) tienen sus propios
+offsets, y el decodificador RLE es el trozo más delicado del formato. Está
+explicado aparte, con el algoritmo completo, en
+[`ANIMACIONES.md`](ANIMACIONES.md).
+
+Los tres offsets que hay que clavar:
+
+```
+fps       @ 32     (float32)
+numframes @ 56     (int32)   <- no en 36
+numblends @ 120    (int32)
+animindex @ 124    (int32)   <- absoluto; no en 128
+```
+
+## 4. Escala y ejes
 
 - **GoldSrc**: 1 unidad ≈ 0.025 m. `+X` este, `+Y` norte, `+Z` arriba.
 - **Godot**: `+X` este, `+Y` arriba, `+Z` hacia el sur.
 - Conversión usada: `(x, z, -y) * 0.025`.
 
-## 4. Cómo verificarlo tú
+## 5. Cómo verificarlo tú
 
 ```bash
 python3 tools/cs15_validate.py --map de_dust2 --model gign

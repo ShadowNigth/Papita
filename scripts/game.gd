@@ -30,6 +30,12 @@ var hud: Hud
 var info_mapa: Dictionary = {}
 
 var _nodo_mapa: Node3D
+var _actores: Array[ActorModel] = []
+var _actores_meta: Array[Dictionary] = []
+
+## Cuantos soldados animados se colocan (0 = ninguno). Se puede cambiar con
+## `--actores N` en la linea de comandos.
+var num_actores: int = 4
 
 
 func _ready() -> void:
@@ -51,6 +57,12 @@ func _leer_argumentos() -> void:
 			"--arma":
 				if i + 1 < args.size():
 					set_meta("arma_inicial", args[i + 1])
+			"--actores":
+				if i + 1 < args.size():
+					num_actores = int(args[i + 1])
+			"--secuencia":
+				if i + 1 < args.size():
+					set_meta("secuencia_forzada", args[i + 1])
 
 
 func cargar_mapa(id: String) -> void:
@@ -77,6 +89,7 @@ func cargar_mapa(id: String) -> void:
 	add_child(_nodo_mapa)
 
 	_colocar_jugador()
+	_colocar_actores()
 	_crear_hud()
 	_crear_fondo()
 
@@ -100,6 +113,90 @@ func _colocar_jugador() -> void:
 		jugador.equipar(arma_inicial)
 	else:
 		jugador.equipar("glock18")
+
+
+## Coloca soldados animados de las facciones originales. Se mueven en linea
+## recta entre puntos aleatorios del mapa (no hay navegacion todavia), asi que
+## pueden atravesar paredes: es una demo de animacion, no IA.
+func _colocar_actores() -> void:
+	for a in _actores:
+		if is_instance_valid(a):
+			a.queue_free()
+	_actores.clear()
+	_actores_meta.clear()
+	if num_actores <= 0:
+		return
+
+	var spawns: Array[Vector3] = info_mapa.get("spawns", [])
+	if spawns.is_empty():
+		return
+	var facciones := ["gign", "sas", "urban", "gsg9", "terror", "leet", "arctic", "guerilla"]
+	for i in num_actores:
+		var faccion: String = facciones[i % facciones.size()]
+		var actor := ActorModel.new()
+		actor.name = "actor_%s_%d" % [faccion, i]
+		var ok := actor.cargar("player/%s/%s.mdl" % [faccion, faccion], paleta)
+		if not ok and faccion != "urban":
+			# si esa faccion falla, se usa urban, que siempre esta
+			ok = actor.cargar("player/urban/urban.mdl", paleta)
+		if not ok:
+			actor.queue_free()
+			continue
+		var destino := spawns[randi() % spawns.size()]
+		actor.position = destino + Vector3(0, 0.1, 0)
+		add_child(actor)
+		var forzada := String(get_meta("secuencia_forzada", ""))
+		if not forzada.is_empty():
+			actor.reproducir(forzada)
+		else:
+			actor.reproducir("idle1")
+		_actores.append(actor)
+		_actores_meta.append({
+			"objetivo": spawns[randi() % spawns.size()],
+			"pausa": randf_range(0.5, 3.0),
+		})
+	print("[papita] %d actores animados (%s)" % [
+		_actores.size(), ", ".join(a.secuencias_disponibles().slice(0, 6))])
+
+
+func _process(delta: float) -> void:
+	_mover_actores(delta)
+
+
+func _mover_actores(delta: float) -> void:
+	for i in _actores.size():
+		var actor := _actores[i]
+		if not is_instance_valid(actor) or actor.lector == null:
+			continue
+		var meta: Dictionary = _actores_meta[i]
+		var pausa: float = float(meta.get("pausa", 0.0))
+		if pausa > 0.0:
+			meta["pausa"] = pausa - delta
+			actor.animar_por_velocidad(0.0)
+			continue
+		var objetivo: Vector3 = meta["objetivo"]
+		var plano := Vector3(objetivo.x, actor.position.y, objetivo.z)
+		var distancia := actor.position.distance_to(plano)
+		if distancia < 0.6:
+			# destino alcanzado: descansa y elige otro
+			meta["objetivo"] = _punto_aleatorio()
+			meta["pausa"] = randf_range(0.4, 2.0)
+			continue
+		var direccion := (plano - actor.position).normalized()
+		var rapidez := 3.4
+		actor.position += direccion * rapidez * delta
+		# Los modelos de GoldSrc estan modelados mirando hacia +X. `look_at`
+		# orientaria -Z hacia el objetivo, asi que se calcula el giro a mano:
+		# rotation.y = t lleva el +X local a (cos t, 0, -sin t).
+		actor.rotation.y = atan2(-direccion.z, direccion.x)
+		actor.animar_por_velocidad(rapidez)
+
+
+func _punto_aleatorio() -> Vector3:
+	var spawns: Array[Vector3] = info_mapa.get("spawns", [])
+	if spawns.is_empty():
+		return Vector3.ZERO
+	return spawns[randi() % spawns.size()]
 
 
 func _crear_hud() -> void:

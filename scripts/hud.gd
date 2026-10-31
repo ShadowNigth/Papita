@@ -73,7 +73,7 @@ func _draw() -> void:
 		var lineas := [
 			"WASD mover   ESPACIO saltar   CTRL agachar   CLIC disparar   R recargar",
 			"1-5 armas   RUEDA cambiar   ESC liberar raton   F1 ocultar esta ayuda",
-			"Mapa cargado desde el .bsp original de Counter-Strike 1.5",
+			"Mapa y soldados leidos de los .bsp/.mdl originales, con sus animaciones",
 		]
 		var alto := tam.y - 132.0
 		for i in lineas.size():

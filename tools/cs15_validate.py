@@ -368,7 +368,7 @@ class Mdl:
             scale = struct.unpack_from("<6f", self.raw, base + 88)
             self.huesos.append({"nombre": nombre, "padre": padre,
                                 "pos": value[0:3], "rot": value[3:6],
-                                "esc": tuple(v if v else 1.0 for v in scale[0:3])})
+                                "value": value, "esc_raw": scale})
 
     def _leer_secuencias(self) -> None:
         self.secuencias = []
@@ -377,8 +377,12 @@ class Mdl:
             if base + 176 > len(self.raw):
                 break
             nombre = self.raw[base:base + 32].split(b"\0")[0].decode("latin1")
-            fps, flags, frames = struct.unpack_from("<ifi", self.raw, base + 32)
-            self.secuencias.append({"nombre": nombre, "fps": fps, "cuadros": frames})
+            # mstudioseqdesc_t: fps@32 flags@36 ... numframes@56 ... numblends@120 animindex@124
+            fps = struct.unpack_from("<f", self.raw, base + 32)[0]
+            cuadros = struct.unpack_from("<i", self.raw, base + 56)[0]
+            numblends, animindex = struct.unpack_from("<ii", self.raw, base + 120)
+            self.secuencias.append({"nombre": nombre, "fps": fps, "cuadros": cuadros,
+                                    "blends": numblends, "animindex": animindex})
 
     def _leer_texturas(self) -> None:
         self.texturas = []
@@ -481,16 +485,8 @@ class Mdl:
         """
         self.bind_pose: list[np.ndarray] = []
         for i, h in enumerate(self.huesos):
-            rx, ry, rz = h["rot"]
-            cx, sx = math.cos(rx), math.sin(rx)
-            cy, sy = math.cos(ry), math.sin(ry)
-            cz, sz = math.cos(rz), math.sin(rz)
-            # rotacion Z*Y*X (mismo orden que AngleQuaternion del motor)
-            m = np.array([
-                [cz * cy, cz * sy * sx - sz * cx, cz * sy * cx + sz * sx, h["pos"][0]],
-                [sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx, h["pos"][1]],
-                [-sy,     cy * sx,                cy * cx,                h["pos"][2]],
-            ], dtype=np.float64)
+            # misma rotacion que el motor: cuaternion desde (pitch, yaw, roll)
+            m = Mdl._matriz(list(h["pos"]), list(h["rot"]))
             # OJO: value[6]/scale[6] del hueso NO son un transform. `scale` es el
             # factor de compresion (1/256) de los controladores de hueso, no una
             # escala de la matriz; multiplicarla colapsa el modelo al origen.
@@ -512,6 +508,205 @@ class Mdl:
             m = self.bind_pose[b] if b < len(self.bind_pose) else self.bind_pose[0]
             out[i] = m[:, :3] @ v + m[:, 3]
         return out
+
+    # ------------------------------------------------------------------
+    # animacion (equivalente a R_StudioCalcBones + SV_StudioSetupBones)
+    # ------------------------------------------------------------------
+    def _canal(self, base: int, frame: int) -> tuple[int, int]:
+        """Lee un canal RLE y devuelve los dos valores a interpolar.
+
+        Port literal de R_StudioCalcBones (public/xash3d_mathlib.c): cada bloque
+        empieza con un `mstudioanimvalue_t` de 2 bytes donde `num.valid` dice
+        cuantos valores reales siguen y `num.total` cuantos cuadros cubren.
+        """
+        p = base
+        valid = self.raw[p]
+        total = self.raw[p + 1]
+        j = frame
+        if total < valid:
+            j = 0
+        while total <= j:
+            j -= total
+            p += (valid + 1) * 2
+            valid = self.raw[p]
+            total = self.raw[p + 1]
+            if total < valid:
+                j = 0
+
+        def valor(celda: int) -> int:
+            pos = p + celda * 2
+            if pos + 2 > len(self.raw):
+                return 0
+            return struct.unpack_from("<h", self.raw, pos)[0]
+
+        if valid > j:
+            v1 = valor(j + 1)
+            if valid > j + 1:
+                v2 = valor(j + 2)
+            elif total > j + 1:
+                v2 = v1
+            else:
+                v2 = valor(valid + 2)
+        else:
+            v1 = valor(valid)
+            v2 = v1 if total > j + 1 else valor(valid + 2)
+        return v1, v2
+
+    def _canal_bone(self, bone: dict, panim: int, canal: int, frame: int) -> tuple[float, float]:
+        off = struct.unpack_from("<H", self.raw, panim + canal * 2)[0]
+        base = bone["value"][canal]
+        if off == 0:
+            return base, base
+        raw1, raw2 = self._canal(panim + off, frame)
+        esc = bone["esc_raw"][canal]
+        return base + raw1 * esc, base + raw2 * esc
+
+    def pose(self, seq: int, frame: float) -> list[np.ndarray]:
+        """Matrices 3x4 globales de cada hueso en la secuencia y cuadro dados."""
+        if not (0 <= seq < len(self.secuencias)):
+            return self.bind_pose
+        desc = self.secuencias[seq]
+        cuadros = max(1, int(desc["cuadros"]))
+        f = frame % cuadros
+        entero = int(f)
+        s = f - entero
+        tabla = desc["animindex"]
+        if tabla <= 0 or tabla >= len(self.raw):
+            return self.bind_pose
+
+        locales: list[np.ndarray] = []
+        for i, h in enumerate(self.huesos):
+            panim = tabla + i * 12          # un mstudioanim_t (6 uint16) por hueso
+            if panim + 12 > len(self.raw):
+                locales.append(self._matriz(h["pos"], h["rot"]))
+                continue
+            p1, p2 = [], []
+            for c in range(3):
+                a, b = self._canal_bone(h, panim, c, entero)
+                p1.append(a)
+                p2.append(b)
+            r1, r2 = [], []
+            for c in range(3, 6):
+                a, b = self._canal_bone(h, panim, c, entero)
+                r1.append(a)
+                r2.append(b)
+            pos = np.array([p1[k] + (p2[k] - p1[k]) * s for k in range(3)])
+            q1 = self._quat(r1)
+            q2 = self._quat(r2)
+            q = self._slerp(q1, q2, s)
+            locales.append(self._matriz_quat(pos, q))
+
+        globales: list[np.ndarray] = []
+        for i, h in enumerate(self.huesos):
+            padre = h["padre"]
+            if 0 <= padre < len(globales):
+                pm = globales[padre]
+                m = np.hstack([pm[:, :3] @ locales[i][:, :3],
+                               (pm[:, :3] @ locales[i][:, 3:4] + pm[:, 3:4])])
+            else:
+                m = locales[i]
+            globales.append(m)
+        return globales
+
+    @staticmethod
+    def _quat(angles: list[float]) -> np.ndarray:
+        """Cuaternion desde (pitch, yaw, roll) en RADIANES, como AngleQuaternion."""
+        sr, cr = math.sin(angles[0] * 0.5), math.cos(angles[0] * 0.5)
+        sp, cp = math.sin(angles[1] * 0.5), math.cos(angles[1] * 0.5)
+        sy, cy = math.sin(angles[2] * 0.5), math.cos(angles[2] * 0.5)
+        return np.array([
+            sr * cp * cy - cr * sp * sy,
+            cr * sp * cy + sr * cp * sy,
+            cr * cp * sy - sr * sp * cy,
+            cr * cp * cy + sr * sp * sy,
+        ])
+
+    @staticmethod
+    def _slerp(q1: np.ndarray, q2: np.ndarray, s: float) -> np.ndarray:
+        d = float(np.dot(q1, q2))
+        if d < 0.0:
+            q2 = -q2
+            d = -d
+        if d > 0.9995:
+            r = q1 + (q2 - q1) * s
+        else:
+            t = math.acos(max(-1.0, min(1.0, d)))
+            r = (q1 * math.sin((1 - s) * t) + q2 * math.sin(s * t)) / math.sin(t)
+        n = np.linalg.norm(r)
+        return r / n if n > 1e-9 else q1
+
+    @staticmethod
+    def _matriz_quat(pos, q) -> np.ndarray:
+        x, y, z, w = q
+        r = np.array([
+            [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+        ])
+        return np.hstack([r, np.array(pos).reshape(3, 1)])
+
+    @staticmethod
+    def _matriz(pos, rot) -> np.ndarray:
+        return Mdl._matriz_quat(pos, Mdl._quat(list(rot)))
+
+    def vertices_pose(self, malla: dict, pose: list[np.ndarray]) -> np.ndarray:
+        verts = malla["vertices"]
+        huesos = malla.get("huesos")
+        if huesos is None or not pose:
+            return verts
+        out = np.empty_like(verts)
+        for i, v in enumerate(verts):
+            b = huesos[i] if i < len(huesos) else 0
+            m = pose[b] if b < len(pose) else pose[0]
+            out[i] = m[:, :3] @ v + m[:, 3]
+        return out
+
+    def probar_animaciones(self, max_secuencias: int = 8) -> dict:
+        """Evalua secuencias reales y comprueba que el esqueleto se mueve.
+
+        Detecta lo que un parser roto no detecta: `animindex` fuera de rango,
+        NaN en las poses y secuencias que deberian moverse y no lo hacen.
+        """
+        problemas: list[str] = []
+        evaluadas = 0
+        con_movimiento = 0
+        estaticas = 0
+        nan = 0
+        for i, desc in enumerate(self.secuencias[:max_secuencias]):
+            if desc["animindex"] <= 0 or desc["animindex"] >= len(self.raw):
+                problemas.append(f"secuencia '{desc['nombre']}' con animindex invalido")
+                continue
+            frames = max(1, int(desc["cuadros"]))
+            if frames <= 1:
+                estaticas += 1   # las armas no se animan: 1 cuadro es normal
+                continue
+            poses = []
+            for f in (0, frames // 3, (2 * frames) // 3, frames - 1):
+                pose = self.pose(i, f)
+                if any(not np.all(np.isfinite(m)) for m in pose):
+                    nan += 1
+                    continue
+                poses.append(pose)
+            evaluadas += 1
+            if len(poses) >= 2:
+                # se compara la posicion global de la raiz y de un hueso del pie
+                raiz = poses[0][0][:, 3]
+                pie = poses[0][min(20, len(poses[0]) - 1)][:, 3]
+                for otra in poses[1:]:
+                    if np.linalg.norm(otra[0][:, 3] - raiz) > 1e-3 or \
+                       np.linalg.norm(otra[min(20, len(otra) - 1)][:, 3] - pie) > 1e-2:
+                        con_movimiento += 1
+                        break
+        if nan:
+            problemas.append(f"{nan} poses con valores no finitos")
+        return {"evaluadas": evaluadas, "con_movimiento": con_movimiento,
+                "estaticas": estaticas, "problemas": problemas}
+
+    def indice_secuencia(self, nombre: str) -> int:
+        for i, s in enumerate(self.secuencias):
+            if s["nombre"] == nombre:
+                return i
+        return -1
 
     def validar(self) -> dict:
         problemas: list[str] = []
@@ -540,6 +735,65 @@ class Mdl:
             "triangulos": total_tris,
             "problemas": problemas,
         }
+
+
+def render_pose(mdl: Mdl, pose, tam: int = 300) -> Image.Image:
+    """Vista frontal (X/Z, que es el plano vertical en GoldSrc) de una pose."""
+    img = Image.new("RGB", (tam, tam), (14, 16, 20))
+    dib = ImageDraw.Draw(img)
+    mallas = [(m, mdl.vertices_pose(m, pose) if pose else mdl.vertices_modelo(m))
+              for m in mdl.mallas]
+    if not mallas:
+        return img
+    todos = np.concatenate([v for _, v in mallas])
+    esc = (tam - 32) / max(np.ptp(todos[:, 0]), np.ptp(todos[:, 2]), 1e-3)
+    cx = (todos[:, 0].max() + todos[:, 0].min()) / 2
+    cz = (todos[:, 2].max() + todos[:, 2].min()) / 2
+    for malla, pts in mallas:
+        proj = [((p[0] - cx) * esc + tam / 2, (cz - p[2]) * esc + tam / 2) for p in pts]
+        for (a, b, c) in malla["triangulos"]:
+            if max(a, b, c) >= len(proj) or min(a, b, c) < 0:
+                continue
+            n = np.cross(pts[b] - pts[a], pts[c] - pts[a])
+            luz = 0.55 + 0.45 * abs(n[1]) / (np.linalg.norm(n) + 1e-9)
+            dib.polygon([proj[a], proj[b], proj[c]],
+                        fill=(int(196 * luz), int(184 * luz), int(168 * luz)))
+    return img
+
+
+def render_anim(mdl: Mdl, secuencia: str, salida: Path, muestras: int = 8,
+                gif: Path | None = None) -> Path | None:
+    """Tira de fotogramas de una secuencia + GIF opcional."""
+    idx = mdl.indice_secuencia(secuencia)
+    if idx < 0:
+        print(f"  (el modelo no tiene la secuencia '{secuencia}')")
+        return None
+    desc = mdl.secuencias[idx]
+    total = max(1, int(desc["cuadros"]))
+    cuadros = [round(i * (total - 1) / max(1, muestras - 1)) for i in range(muestras)]
+    imgs = []
+    for f in cuadros:
+        im = render_pose(mdl, mdl.pose(idx, f))
+        ImageDraw.Draw(im).text((6, 6), f"{secuencia}  f{f}/{total - 1}  {desc['fps']:.0f}fps",
+                                fill=(120, 220, 120))
+        imgs.append(im)
+    cols = 4
+    filas = (len(imgs) + cols - 1) // cols
+    tira = Image.new("RGB", (300 * cols, 300 * filas), (10, 12, 16))
+    for k, im in enumerate(imgs):
+        tira.paste(im, ((k % cols) * 300, (k // cols) * 300))
+    salida.parent.mkdir(parents=True, exist_ok=True)
+    tira.save(salida)
+
+    if gif is not None:
+        todos = []
+        for f in range(0, total, max(1, total // 24)):
+            todos.append(render_pose(mdl, mdl.pose(idx, f), 200))
+        if todos:
+            todos[0].save(gif, save_all=True, append_images=todos[1:],
+                          duration=int(1000.0 / max(1.0, desc["fps"]) * max(1, total // 24)),
+                          loop=0)
+    return salida
 
 
 def render_modelo(mdl: Mdl, salida: Path, tam: int = 420) -> Path:
@@ -581,6 +835,8 @@ def main() -> int:
     ap.add_argument("--model", help="validar/renderizar solo este modelo")
     ap.add_argument("--no-render", action="store_true", help="no generar PNG")
     ap.add_argument("--out", default=str(SALIDA), help="carpeta de PNG")
+    ap.add_argument("--anim", action="append", metavar="MODELO:SECUENCIA",
+                    help="tira de fotogramas de una secuencia (repetible)")
     args = ap.parse_args()
 
     paleta, origen_paleta = cargar_paleta()
@@ -610,16 +866,31 @@ def main() -> int:
     modelos = sorted(MODELS.rglob("*.mdl"))
     if args.model:
         modelos = [p for p in modelos if p.stem == args.model]
+    anim_ok = 0
+    anim_total = 0
+    anim_problemas = 0
     for p in modelos:
         mdl = Mdl(p, paleta)
         info = mdl.validar()
+        if mdl.secuencias:
+            res = mdl.probar_animaciones()
+            anim_total += res["evaluadas"]
+            anim_ok += res["con_movimiento"]
+            anim_problemas += len(res["problemas"])
+            problemas_totales += len(res["problemas"])
+            info["problemas"].extend(res["problemas"])
         problemas_totales += len(info["problemas"])
         if info["problemas"]:
             print(f"  {info['fichero']:28s} {info['huesos']:>3d} huesos {info['triangulos']:>6d} tris  "
                   f"REVISAR {'; '.join(info['problemas'])}")
         elif p.stem in ("gign", "terror", "v_ak47_r", "w_ak47", "p_glock18", "hostage"):
+            detalle = ""
+            if mdl.secuencias:
+                res = mdl.probar_animaciones()
+                detalle = f" anim={res['con_movimiento']}/{res['evaluadas']}" \
+                    f"{' (' + str(res['estaticas']) + ' estaticas)' if res['estaticas'] else ''}"
             print(f"  {info['fichero']:28s} {info['huesos']:>3d} huesos {info['secuencias']:>4d} seq "
-                  f"{info['triangulos']:>6d} tris  ok")
+                  f"{info['triangulos']:>6d} tris  ok{detalle}")
             if not args.no_render:
                 png = render_modelo(mdl, Path(args.out) / f"modelo_{p.stem}.png")
                 print(f"      -> {png.relative_to(ROOT)}")
@@ -627,6 +898,27 @@ def main() -> int:
     if not args.model:
         ok = sum(1 for p in modelos if not Mdl(p, paleta).validar()["problemas"])
         print(f"  {ok}/{len(modelos)} modelos sin problemas")
+    if anim_total:
+        print(f"  animaciones: {anim_ok}/{anim_total} secuencias evaluadas se mueven "
+              f"({anim_problemas} problemas)")
+
+    if args.anim:
+        print("\n== ANIMACIONES ==")
+        for espec in args.anim:
+            if ":" not in espec:
+                print(f"  formato incorrecto: {espec} (usa MODELO:SECUENCIA)")
+                continue
+            modelo, secuencia = espec.split(":", 1)
+            rutas = [p for p in MODELS.rglob("*.mdl") if p.stem == modelo]
+            if not rutas:
+                print(f"  no encuentro el modelo '{modelo}'")
+                continue
+            mdl = Mdl(rutas[0], paleta)
+            base = Path(args.out) / f"anim_{modelo}_{secuencia}"
+            png = render_anim(mdl, secuencia, base.with_suffix(".png"), 8,
+                              base.with_suffix(".gif"))
+            if png:
+                print(f"  {png.relative_to(ROOT)}  (+ {base.with_suffix('.gif').name})")
 
     print("\n== RESUMEN ==")
     print(f"  problemas de formato: {problemas_totales}")
