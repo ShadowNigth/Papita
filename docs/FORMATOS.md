@@ -225,9 +225,9 @@ animindex @ 124    (int32)   <- absoluto; no en 128
 - **GoldSrc**: 1 unidad ≈ 0.025 m. `+X` este, `+Y` norte, `+Z` arriba.
 - **Godot**: `+X` este, `+Y` arriba, `+Z` hacia el sur.
 - En `.bsp`: cada vértice pasa a `(x, z, -y) * 0.025` al leerse.
-- En los actores `.mdl`: el esqueleto visual conserva el espacio local del
-  formato; su nodo se rota `-90°` en X (Z-up → Y-up) y se escala por `0.025`.
-  La caja de impacto está fuera de ese nodo y ya usa metros.
+- En los actores `.mdl`: el esqueleto visual se rota `-90°` en X (Z-up → Y-up)
+  y se escala por `0.025`. La caja de impacto queda fuera de ese nodo y ya usa
+  metros.
 
 ## 5. Cómo verificarlo tú
 

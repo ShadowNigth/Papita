@@ -58,9 +58,9 @@ en vez de una textura por cara se empaqueta todo en una imagen y se guarda el
 rectángulo de cada cara para calcular la `UV2`.
 
 **Escala 0.025.** GoldSrc usa ~0.025 m por unidad. Los vértices BSP se convierten
-al leerlos; el modelo MDL conserva sus unidades dentro del lector y su nodo
-visual se convierte de Z-up a Y-up y se escala por 0.025. La cápsula de impacto
-queda fuera de ese nodo y ya se expresa en metros.
+al leerlos; los actores MDL transforman su nodo visual de Z-up a Y-up y lo
+escalan por 0.025. La cápsula de impacto queda fuera de ese nodo y ya se expresa
+en metros.
 
 **Constantes del movimiento copiadas del motor.** No están ajustadas "hasta que
 se siente bien": son `sv_accelerate`, `sv_friction`, `sv_airaccelerate`,

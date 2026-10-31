@@ -110,8 +110,8 @@ func _calcular_bind_pose() -> void:
 		var h: Dictionary = huesos[i]
 		var pos: Vector3 = h["pos"]
 		var rot: Vector3 = h["rot"]
-		# Usar el mismo orden de ángulos GoldSrc que en las poses animadas y
-		# en bind_pose_local; Basis.from_euler usa el orden Euler de Godot.
+		# Usar AngleQuaternion de StudioModel, igual que las poses animadas;
+		# Basis.from_euler usa el orden Euler de Godot y da otra orientación.
 		var t := Transform3D(Basis(_cuaternion(rot)), pos)
 		var padre: int = h["padre"]
 		if padre >= 0 and padre < bind_pose.size():
@@ -360,12 +360,13 @@ func _canal_hueso(hueso: int, panim: int, canal: int, cuadro: int) -> Vector2:
 
 ## Cuaternion desde (pitch, yaw, roll) EN RADIANES, como AngleQuaternion(studio=true).
 static func _cuaternion(angulos: Vector3) -> Quaternion:
-	var sp := sin(angulos.x * 0.5)
-	var cp := cos(angulos.x * 0.5)
-	var sy := sin(angulos.y * 0.5)
-	var cy := cos(angulos.y * 0.5)
-	var sr := sin(angulos.z * 0.5)
-	var cr := cos(angulos.z * 0.5)
+	# AngleQuaternion(..., studio=true): x=pitch, y=yaw, z=roll.
+	var sr := sin(angulos.x * 0.5)
+	var cr := cos(angulos.x * 0.5)
+	var sp := sin(angulos.y * 0.5)
+	var cp := cos(angulos.y * 0.5)
+	var sy := sin(angulos.z * 0.5)
+	var cy := cos(angulos.z * 0.5)
 	return Quaternion(
 		sr * cp * cy - cr * sp * sy,
 		cr * sp * cy + sr * cp * sy,

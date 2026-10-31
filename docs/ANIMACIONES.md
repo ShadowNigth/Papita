@@ -110,20 +110,20 @@ tirones raros: el error aparece solo cuando un bloque cubre varios cuadros.
    `s`.
 2. **Rotación**: convertir cada tripleta a cuaternión y hacer *slerp*. La
    conversión es `AngleQuaternion(..., studio=true)`, que espera los ángulos
-   **en radianes** y en orden `pitch, yaw, roll`:
+   **en radianes** y en orden `pitch, yaw, roll`. El modo Studio asigna:
 
 ```
-sr,cr = sin/cos(roll * 0.5)
-sp,cp = sin/cos(yaw  * 0.5)
-sy,cy = sin/cos(pitch* 0.5)
+sr,cr = sin/cos(pitch * 0.5)
+sp,cp = sin/cos(yaw   * 0.5)
+sy,cy = sin/cos(roll  * 0.5)
 q.x = sr*cp*cy - cr*sp*sy
 q.y = cr*sp*cy + sr*cp*sy
 q.z = cr*cp*sy - sr*sp*cy
 q.w = cr*cp*cy + sr*sp*sy
 ```
 
-Ojo: el primer componente mezcla `roll` con `pitch` con el signo cambiado. No es
-el `Euler → quaternion` estándar de ningún motor, es el de GoldSrc.
+No reordenar los ángulos antes de esta fórmula: así se conserva exactamente
+la orientación de los huesos de StudioModel.
 
 3. **Matriz local** del hueso: `Transform3D(Basis(q), posicion)`.
 4. **Matriz global**: multiplicar por la del padre, en orden de jerarquía. En

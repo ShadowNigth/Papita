@@ -46,9 +46,8 @@ func cargar(fichero: String, paleta: CsPalette) -> bool:
 
 	esqueleto = lector.construir_esqueleto()
 	esqueleto.name = "esqueleto"
-	# Los modelos StudioModel conservan ejes y unidades GoldSrc: Z arriba y
-	# 1 unidad = 0,025 m. La colisión del actor ya está en metros y queda fuera
-	# de este nodo visual.
+	# Los StudioModel usan Z-up y unidades GoldSrc. Convertimos a Y-up y metros
+	# en el nodo visual; la colisión, fuera de este nodo, ya usa metros.
 	esqueleto.rotation_degrees.x = -90.0
 	esqueleto.scale = Vector3.ONE * ESCALA_GOLDSRC
 	add_child(esqueleto)

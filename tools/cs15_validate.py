@@ -618,7 +618,7 @@ class Mdl:
 
     @staticmethod
     def _quat(angles: list[float]) -> np.ndarray:
-        """Cuaternion desde (pitch, yaw, roll) en RADIANES, como AngleQuaternion."""
+        """Cuaternion GoldSrc studio=true desde (pitch, yaw, roll), en radianes."""
         sr, cr = math.sin(angles[0] * 0.5), math.cos(angles[0] * 0.5)
         sp, cp = math.sin(angles[1] * 0.5), math.cos(angles[1] * 0.5)
         sy, cy = math.sin(angles[2] * 0.5), math.cos(angles[2] * 0.5)
