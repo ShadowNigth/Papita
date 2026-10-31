@@ -78,6 +78,7 @@ var errores: Array[String] = []
 ## seguidos. El modelo 0 es el mundo; el resto son los "model *N" de las
 ## entidades (zonas de bomba, buyzones, puertas...).
 var modelos: Array[AABB] = []
+var modelos_goldsrc: Array[AABB] = []
 
 
 static func cargar(ruta_bsp: String, paleta: CsPalette) -> BspReader:
@@ -191,7 +192,14 @@ func _leer_modelos() -> void:
 			datos.decode_float(base + 8))
 		var mx := Vector3(datos.decode_float(base + 12), datos.decode_float(base + 16),
 			datos.decode_float(base + 20))
-		modelos.append(AABB(_a_godot(mn), _a_godot(mx) - _a_godot(mn)))
+		modelos_goldsrc.append(AABB(mn, mx - mn))
+		# Al invertir el eje Y de GoldSrc, las esquinas cambian de orden; un AABB
+		# de Godot necesita posición mínima y tamaño no negativo.
+		var ga := _a_godot(mn)
+		var gb := _a_godot(mx)
+		var gmin := Vector3(minf(ga.x, gb.x), minf(ga.y, gb.y), minf(ga.z, gb.z))
+		var gmax := Vector3(maxf(ga.x, gb.x), maxf(ga.y, gb.y), maxf(ga.z, gb.z))
+		modelos.append(AABB(gmin, gmax - gmin))
 
 
 ## Convierte un punto de GoldSrc a coordenadas de Godot (sin escalar; la escala
@@ -209,6 +217,17 @@ func caja_entidad(e: Dictionary) -> AABB:
 	if idx < 0 or idx >= modelos.size():
 		return AABB()
 	return modelos[idx]
+
+
+## Caja sin conversión de ejes (unidades GoldSrc), para navegación y parsing.
+func caja_entidad_goldsrc(e: Dictionary) -> AABB:
+	var texto := String(e.get("model", ""))
+	if not texto.begins_with("*"):
+		return AABB()
+	var idx := int(texto.substr(1))
+	if idx < 0 or idx >= modelos_goldsrc.size():
+		return AABB()
+	return modelos_goldsrc[idx]
 
 
 ## Zonas de una clase ("func_bomb_target", "func_buyzone",

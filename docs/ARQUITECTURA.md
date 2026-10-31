@@ -120,6 +120,11 @@ lump 10 hojas ─┘                                              (40 u, cabe el
                                             A*  ◄── nodos + aristas ──┘
                                              │
                                     suavizado por línea recta
+                                             │
+     entidades func_ladder ──► rellanos bajos/altos ──► columna libre
+                                      │                     │
+                                      └──── arista marcada ─┘
+                                            con waypoints verticales
 ```
 
 **Por qué el árbol BSP y no rayos físicos.** El mapa ya está particionado: un
@@ -137,13 +142,29 @@ hueco alrededor del punto con el propio árbol.
 **Qué se considera "se puede andar".** Caras del modelo 0 cuya normal mira hacia
 arriba (coseno ≥ 0,6), sin texturas de cielo, clip ni agua; puntos donde caben
 el cuerpo y la cabeza del actor; y aristas entre nodos vecinos con un desnivel
-de hasta 40 unidades, que es lo que permite subir las escaleras del original sin
-modelarlas.
+de hasta 40 unidades (escalones y rampas).
 
-**Lo que no hay.** Escaleras de mano, saltos y puertas: por eso hay un 15-45 %
-de nodos inalcanzables según el mapa (tejados y cornisas), y `PENDIENTE.md` lo
-lista como deuda. Si A* no encuentra ruta, el bot va en línea recta: se queda
-pegado a la pared, pero no se queda quieto.
+**Escaleras de mano (`func_ladder`).** No tienen caras de suelo: son brushes
+trigger invisibles. De cada brush se lee su caja en unidades GoldSrc y se buscan
+nodos caminables a la altura de los dos extremos. Solo se añade una transición
+si pertenecen a componentes distintas, están próximos a la caja y el BSP deja
+libres el cuerpo y la cabeza cada 20 unidades por la columna y en las entradas
+horizontales. La transición se marca aparte de una arista normal; A* conserva
+los waypoints verticales (el suavizador no los elimina) y el bot sube o baja a
+2,2 m/s. Se validan las 20 transiciones halladas en ambos sentidos. De los 34
+triggers de los mapas, los otros 14 se omiten: algunos ya son alcanzables por
+el grafo y otros no tienen dos rellanos que pasen las pruebas.
+
+La caja de `dmodel_t` se conserva tanto en ejes GoldSrc (para este grafo) como
+en ejes Godot. Al invertir Y, se ordenan las esquinas transformadas antes de
+crear el `AABB`: así `has_point()` y las cajas de compra/bomba tienen tamaño no
+negativo.
+
+**Lo que no hay.** Saltos y puertas: por eso la fracción alcanzable desde alguno
+de los spawns va del 47,1 % al 95,4 %, según el mapa. Lo que queda separado
+incluye tejados y cornisas; no debe confundirse ese porcentaje del grafo con
+una medida de superficie jugable. Si A* no encuentra ruta, el bot usa el
+fallback en línea recta. Ver `PENDIENTE.md` para las limitaciones.
 
 ## Los tres niveles de verificación
 

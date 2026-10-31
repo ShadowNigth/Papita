@@ -25,7 +25,7 @@ spawns y el círculo naranja el sitio de bomba A/B.*
 | Construcción del mapa en Godot (malla + colisión + atlas de luz) | escrito, **sin ejecutar** |
 | Jugador, armas, audio, HUD | escrito, **sin ejecutar** |
 | Modo de juego: rondas, economía, compra, C4 | escrito, **sin ejecutar** |
-| Grafo de navegación sacado del `.bsp` | **validado** en los 10 mapas (Python) |
+| Grafo de navegación sacado del `.bsp` | **validado** en los 10 mapas; 20 subidas por escalera verificadas (Python) |
 | IA de los bots: ver, apuntar, disparar y moverse | escrita, **sin ejecutar** |
 | Compilar el motor Godot | **no disponible en el entorno donde se escribió** |
 
@@ -36,7 +36,7 @@ Lo que sí está comprobado, y cómo:
   Resultado: **10/10 mapas y 96/96 modelos sin un solo problema de formato**.
 - Ese mismo script **renderiza** los mapas y los modelos a PNG (los de
   `docs/previews/`), así que la geometría no solo se parsea: se dibuja.
-- `tools/gdscript_check.py` valida los 16 scripts con el parser oficial de
+- `tools/gdscript_check.py` valida los 18 scripts con el parser oficial de
   GDScript (`gdtoolkit`) y contrasta cada llamada a la API contra el volcado de
   la API de Godot 4.4. También cruza las llamadas y señales **entre las clases
   del propio proyecto** (que `director.comprar()` exista, que la señal
@@ -105,11 +105,12 @@ la partida, `Esc` liberar el ratón.
 
 *`run` del terrorista, 37 cuadros a 60 fps, con la pose de fusil.*
 
-Al arrancar se colocan **4 soldados animados** de las facciones originales
-(`gign`, `sas`, `urban`, `gsg9`, `terror`, `leet`, `arctic`, `guerilla`) que
-deambulan por el mapa cambiando entre `idle1`, `walk` y `run` según su
-velocidad. Es una demostración de animación, no IA: se mueven en línea recta y
-pueden atravesar paredes (`docs/PENDIENTE.md`).
+Al arrancar aparecen **4 bots** con los modelos de las facciones originales
+(`gign`, `sas`, `urban`, `gsg9`, `terror`, `leet`, `arctic`, `guerilla`). Su IA
+está escrita: patrullan el grafo del mapa, ven con FOV y línea de visión,
+disparan, recargan y usan las transiciones de escaleras de mano disponibles.
+El código no se ha podido ejecutar en Godot aquí; `docs/PENDIENTE.md` detalla
+qué se ha validado por simulación y qué falta.
 
 ```bash
 godot --path . -- --actores 12 --secuencia run   # 12 soldados corriendo
@@ -142,10 +143,20 @@ Se mueven por un **grafo de navegación sacado del propio `.bsp`**, no del aire:
   que hacía `SV_PointContents` en GoldSrc.
 * Se muestrean las caras del modelo 0 cuya normal mira hacia arriba, cada 40
   unidades (1 m), aceptando solo los puntos donde cabe el actor de pie.
-* Se conectan los nodos vecinos con un descalón menor que 40 unidades, así que
-  las escaleras y rampas del original se recorren sin trucos.
-* El camino sale de un A* sobre esos nodos y se **suaviza** con cortes en línea
-  recta, para que no caminen como en una rejilla.
+* Se conectan vecinos con un desnivel menor que 40 unidades (escalones y
+  rampas). Además, las entidades `func_ladder` se convierten en transiciones
+  verticales si hay nodos de suelo en ambos extremos y la columna está libre.
+* El camino sale de un A* y se **suaviza** con cortes en línea recta; el
+  suavizado se detiene en las escaleras y conserva waypoints verticales para
+  que el bot suba o baje por la caja validada, no en diagonal a través del mapa.
+* De los 34 triggers `func_ladder` presentes en los 10 mapas, 20 producen una
+  subida navegable en 5 mapas. Los demás ya están en una zona conectada o no
+  tienen dos rellanos que pasen las comprobaciones geométricas.
+
+El porcentaje de grafo alcanzable desde alguno de los spawns sube, entre otros,
+de 59,0 % a 79,4 % en `de_inferno`, de 56,7 % a 58,2 % en `de_nuke`, y de
+81,5 % a 89,6 % en `de_train`. Los objetivos de juego siguen siendo alcanzables
+en todos los mapas que los tienen.
 
 Tres niveles (`--skill 0|1|2`), con los nombres de los `bot_skill` del original:
 
@@ -267,17 +278,22 @@ animaciones: 215/261 secuencias evaluadas se mueven (0 problemas)
 
 == MODO DE JUEGO ==
   constantes y precios del 1.5 contrastados
-  economica simulada en 200 rondas sin salirse de [0, 16000]
+  economía simulada en 200 rondas sin salirse de [0, 16000]
   problemas: 0
 
-== MODO DE JUEGO ==
-  constantes y precios del 1.5 contrastados
-  economica simulada en 200 rondas sin salirse de [0, 16000]
-  problemas: 0
-
-mapa           suelo   nodos  aristas  alcanza  atajos      s  objetivos
-de_dust2         658    5391    18144    84.9%    0.0%   0.97  4/4
-...
+== NAVEGACIÓN ==
+mapa           nodos  aristas  subidas  alcanza  atajos  objetivos
+cs_assault      6474    22773        4    90.6%    0.0%  0/0
+cs_estate       3793    12593        2    95.4%    0.0%  1/1
+cs_italy        7057    22478        0    47.1%    0.3%  0/0
+cs_office       7337    24587        0    53.3%    0.1%  7/7
+de_aztec        6730    22347        0    83.6%    0.1%  5/5
+de_dust         7122    23392        0    78.7%    0.0%  4/4
+de_dust2        5391    18144        0    84.9%    0.0%  4/4
+de_inferno      6814    20711        1    79.4%    0.0%  5/5
+de_nuke         9853    32760        2    58.2%    0.0%  2/2
+de_train        4454    14041       11    89.6%    0.0%  5/5
+escaleras conectadas: 20/34 triggers
 problemas: 0
 
 18 scripts revisados, 0 problemas

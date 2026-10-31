@@ -49,6 +49,7 @@ var objetivo: Vector3 = Vector3.ZERO
 var _camino: PackedVector3Array = PackedVector3Array()
 var _paso: int = 0
 var _recalcular: float = 0.0
+var _subiendo_escalera: bool = false
 var _ve_al_jugador: bool = false
 var _visto_hace: float = 99.0
 var _ultima_pos: Vector3 = Vector3.ZERO
@@ -221,7 +222,9 @@ func _combatir(delta: float) -> void:
 	if _tiempo_lateral <= 0.0:
 		_tiempo_lateral = _rng.randf_range(0.4, 1.1)
 		_lateral = _rng.randf_range(-1.0, 1.0)
-	if distancia < 18.0:
+	if _subiendo_escalera:
+		_seguir_camino(delta, 3.2)
+	elif distancia < 18.0:
 		_moverse_lateral(delta, _lateral)
 	elif _camino.is_empty() or _recalcular <= 0.0:
 		_ir_a(jugador.global_position)
@@ -308,7 +311,7 @@ func _mover_sin_ver(delta: float) -> void:
 		_ir_a(_ultima_pos)
 	else:
 		estado = Estado.PATRULLA
-		if _camino.is_empty() or _paso >= _camino.size() or _recalcular <= 0.0:
+		if not _subiendo_escalera and (_camino.is_empty() or _paso >= _camino.size() or _recalcular <= 0.0):
 			_objetivo_de_patrulla()
 	var rapidez := 3.2 if estado == Estado.ALERTA else 2.4
 	_seguir_camino(delta, rapidez)
@@ -339,6 +342,7 @@ func _ir_a(destino: Vector3) -> void:
 		_camino = PackedVector3Array()
 		return
 	_camino = nav.camino(actor.global_position, destino)
+	_subiendo_escalera = false
 	if _camino.is_empty() and destino.distance_to(actor.global_position) > 1.0:
 		# Sin ruta (el jugador se ha subido a un tejado, o el mapa no tiene
 		# grafo): al menos se acerca en línea recta. Ver PENDIENTE.md.
@@ -360,13 +364,37 @@ func _seguir_camino(delta: float, rapidez: float) -> void:
 		_pausa = _rng.randf_range(0.8, 2.0)
 		return
 	var destino := _camino[_paso]
-	var plano := Vector3(destino.x, actor.global_position.y, destino.z)
-	if plano.distance_to(actor.global_position) < 0.7:
+	var dxz := Vector2(destino.x - actor.global_position.x, destino.z - actor.global_position.z)
+	var distancia_horizontal := dxz.length()
+	var diferencia_vertical := destino.y - actor.global_position.y
+
+	# Los waypoints de una escalera están uno encima del otro. Primero se alinea
+	# con la caja y luego se sube/baja a velocidad constante; no se interpola en
+	# diagonal atravesando la pared. Se bloquea el recálculo hasta llegar arriba.
+	if absf(diferencia_vertical) > 0.15 and distancia_horizontal < 1.2:
+		_subiendo_escalera = true
+		if distancia_horizontal > 0.12:
+			var direccion_lateral := Vector3(dxz.x, 0.0, dxz.y).normalized()
+			actor.global_position += direccion_lateral * rapidez * delta
+			if estado != Estado.COMBATE:
+				actor.rotation.y = atan2(-direccion_lateral.z, direccion_lateral.x)
+			actor.animar_por_velocidad(rapidez)
+			return
+		var vel_escalera := 2.2
+		actor.global_position.y = move_toward(actor.global_position.y, destino.y, vel_escalera * delta)
+		actor.animar_por_velocidad(vel_escalera)
+		if absf(destino.y - actor.global_position.y) < 0.08:
+			_paso += 1
+			_subiendo_escalera = false
+		return
+
+	_subiendo_escalera = false
+	if distancia_horizontal < 0.7:
 		_paso += 1
 		return
-	var direccion := (plano - actor.global_position).normalized()
+	var direccion := Vector3(dxz.x, 0.0, dxz.y).normalized()
 	actor.global_position += direccion * rapidez * delta
-	# la altura se interpola: los escalones del mapa no deben dar tirones
+	# En las rampas normales se interpola la altura; no hay tirones.
 	actor.global_position.y = lerpf(actor.global_position.y, destino.y, minf(1.0, delta * 8.0))
 	if estado != Estado.COMBATE:
 		actor.rotation.y = atan2(-direccion.z, direccion.x)
@@ -404,6 +432,7 @@ func _estado_reset() -> void:
 	_camino = PackedVector3Array()
 	_paso = 0
 	_recalcular = 0.0
+	_subiendo_escalera = false
 	_visto_hace = 99.0
 	_reaccion = 0.0
 	_espera_disparo = 0.0

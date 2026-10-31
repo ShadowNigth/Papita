@@ -12,8 +12,9 @@ extends RefCounted
 ##   arriba, muestreadas cada `PASO` unidades. Cada muestra se acepta solo si
 ##   cabe el actor de pie (comprobando 8 puntos alrededor a la altura del pecho
 ##   y el hueco de la cabeza).
-## * **Cómo se conecta**: nodos vecinos con un desnivel menor que `DESNIVEL_MAX`
-##   (escaleras y rampas del original), sin pared en medio.
+## * **Cómo se conecta**: nodos vecinos con desnivel menor que `DESNIVEL_MAX`
+##   (escalones y rampas), sin pared en medio. Las escaleras de mano se añaden
+##   como transiciones verticales aparte, desde los `func_ladder` del mapa.
 ##
 ## Todo el cálculo va en **unidades GoldSrc**, como el motor; la conversión a
 ## metros se hace al devolver el camino. El espejo en Python
@@ -24,6 +25,12 @@ const RADIO_ACTOR := 16.0      # radio de la cápsula del jugador (32 u de diám
 const ALTURA_PECHO := 20.0     # altura de la comprobación de cuerpo
 const ALTURA_CABEZA := 58.0    # altura de la comprobación de cabeza
 const DESNIVEL_MAX := 40.0     # escalón máximo entre dos nodos
+const MARGEN_ESCALERA := 72.0
+const TOLERANCIA_ESCALERA_Z := 64.0
+const ALTURA_ESCALERA_MAX := 768.0
+const PASO_MUESTREO_ESCALERA := 20.0
+const ALTURA_CUERPO_ESCALERA := 20.0
+const ALTURA_CABEZA_ESCALERA := 58.0
 const NORMAL_SUELO := 0.6      # coseno mínimo entre la normal y la vertical
 const CONT_VACIO := -1
 
@@ -42,7 +49,9 @@ var costes: Array[PackedFloat32Array] = []
 var caras_suelo: int = 0
 var caras_usadas: int = 0
 var _celdas: Dictionary = {}                 # Vector2i -> PackedInt32Array
+var _aristas_escalera: Dictionary = {}       # Vector2i(a,b) -> transición vertical
 var _ms_construccion: int = 0
+var escaleras_conectadas: int = 0
 
 
 ## Construye el grafo del mapa. Devuelve un objeto vacío (0 nodos) si algo
@@ -53,6 +62,7 @@ static func construir(p_bsp: BspReader) -> NavGrid:
 	var t0 := Time.get_ticks_msec()
 	g._construir()
 	g._conectar()
+	g._conectar_escaleras()
 	g._ms_construccion = Time.get_ticks_msec() - t0
 	return g
 
@@ -62,8 +72,8 @@ func valido() -> bool:
 
 
 func resumen() -> String:
-	return "%d nodos de navegación en %d caras (%d ms)" % [
-		posiciones.size(), caras_usadas, _ms_construccion]
+	return "%d nodos de navegación en %d caras, %d escaleras (%d ms)" % [
+		posiciones.size(), caras_usadas, escaleras_conectadas, _ms_construccion]
 
 
 func _construir() -> void:
@@ -179,9 +189,9 @@ func _dentro_convexo(poly: Array[Vector3], p: Vector2) -> bool:
 func _hay_hueco(x: float, y: float, z: float) -> bool:
 	for d: Vector2 in DESPLAZAMIENTOS:
 		if bsp.contenido_goldsrc(Vector3(x + d.x * RADIO_ACTOR, y + d.y * RADIO_ACTOR,
-				z + ALTURA_PECHO)) != CONT_VACIO:
+				z + ALTURA_CUERPO_ESCALERA)) != CONT_VACIO:
 			return false
-	return bsp.contenido_goldsrc(Vector3(x, y, z + ALTURA_CABEZA)) == CONT_VACIO
+	return bsp.contenido_goldsrc(Vector3(x, y, z + ALTURA_CABEZA_ESCALERA)) == CONT_VACIO
 
 
 ## Añade un nodo si en esa celda no hay ya uno a una altura parecida (el mismo
@@ -223,6 +233,174 @@ func _conectar() -> void:
 					costes[b].append(dist)
 
 
+# ------------------------------------------------------------ escaleras de mano
+## Distancia horizontal de un nodo a la caja de `func_ladder`.
+func _distancia_xy_caja(p: Vector3, mn: Vector3, mx: Vector3) -> float:
+	var dx := maxf(maxf(mn.x - p.x, 0.0), p.x - mx.x)
+	var dy := maxf(maxf(mn.y - p.y, 0.0), p.y - mx.y)
+	return Vector2(dx, dy).length()
+
+
+func _raiz_union(padres: Array[int], i: int) -> int:
+	while padres[i] != i:
+		padres[i] = padres[padres[i]]
+		i = padres[i]
+	return i
+
+
+func _unir_union(padres: Array[int], rangos: Array[int], a: int, b: int) -> void:
+	a = _raiz_union(padres, a)
+	b = _raiz_union(padres, b)
+	if a == b:
+		return
+	if rangos[a] < rangos[b]:
+		var temporal := a
+		a = b
+		b = temporal
+	padres[b] = a
+	if rangos[a] == rangos[b]:
+		rangos[a] += 1
+
+
+func _segmento_horizontal_libre(a: Vector3, b: Vector2, z: float) -> bool:
+	for t in [0.2, 0.4, 0.6, 0.8]:
+		var x := lerpf(a.x, b.x, t)
+		var y := lerpf(a.y, b.y, t)
+		if bsp.contenido_goldsrc(Vector3(x, y, z + ALTURA_CUERPO_ESCALERA)) != CONT_VACIO:
+			return false
+		if bsp.contenido_goldsrc(Vector3(x, y, z + ALTURA_CABEZA_ESCALERA)) != CONT_VACIO:
+			return false
+	return true
+
+
+func _columna_escalera_libre(x: float, y: float, z0: float, z1: float) -> bool:
+	var z := z0
+	while z < z1:
+		if bsp.contenido_goldsrc(Vector3(x, y, z + ALTURA_CUERPO_ESCALERA)) != CONT_VACIO:
+			return false
+		if bsp.contenido_goldsrc(Vector3(x, y, z + ALTURA_CABEZA_ESCALERA)) != CONT_VACIO:
+			return false
+		z += PASO_MUESTREO_ESCALERA
+	return bsp.contenido_goldsrc(Vector3(x, y, z1 + ALTURA_CUERPO_ESCALERA)) == CONT_VACIO \
+		and bsp.contenido_goldsrc(Vector3(x, y, z1 + ALTURA_CABEZA_ESCALERA)) == CONT_VACIO
+
+
+## Conecta una sola pareja de rellanos por cada trigger utilizable. La subida
+## se valida con el árbol BSP y queda marcada para que A* y el suavizado no la
+## confundan con un atajo andando a través de la pared.
+func _conectar_escaleras() -> void:
+	if bsp == null or posiciones.is_empty():
+		return
+	var padres: Array[int] = []
+	var rangos: Array[int] = []
+	for i in posiciones.size():
+		padres.append(i)
+		rangos.append(0)
+	for a in vecinos.size():
+		for b in vecinos[a]:
+			if a < b:
+				_unir_union(padres, rangos, a, b)
+
+	for entidad in bsp.entidades_de("func_ladder"):
+		var caja := bsp.caja_entidad_goldsrc(entidad)
+		if caja.size == Vector3.ZERO:
+			continue
+		var mn := caja.position
+		var mx := caja.position + caja.size
+		var alto_brush := mx.z - mn.z
+		if alto_brush < 32.0 or alto_brush > ALTURA_ESCALERA_MAX:
+			continue
+
+		var bajos: Array[Dictionary] = []
+		var altos: Array[Dictionary] = []
+		for i in posiciones.size():
+			var p := posiciones[i]
+			var dxy := _distancia_xy_caja(p, mn, mx)
+			if dxy > MARGEN_ESCALERA:
+				continue
+			var dz_bajo := absf(p.z - mn.z)
+			var dz_alto := absf(p.z - mx.z)
+			if dz_bajo <= TOLERANCIA_ESCALERA_Z:
+				bajos.append({"nodo": i, "dxy": dxy, "dz": dz_bajo})
+			if dz_alto <= TOLERANCIA_ESCALERA_Z:
+				altos.append({"nodo": i, "dxy": dxy, "dz": dz_alto})
+		if bajos.is_empty() or altos.is_empty():
+			continue
+
+		var mejor_puntuacion := INF
+		var mejor_bajo := -1
+		var mejor_alto := -1
+		var mejor_columna := Vector2.ZERO
+		for dato_bajo: Dictionary in bajos:
+			var bajo := int(dato_bajo["nodo"])
+			var pb := posiciones[bajo]
+			for dato_alto: Dictionary in altos:
+				var alto := int(dato_alto["nodo"])
+				if bajo == alto or _raiz_union(padres, bajo) == _raiz_union(padres, alto):
+					continue
+				var pa := posiciones[alto]
+				var subida := pa.z - pb.z
+				if subida <= 32.0 or subida > alto_brush + 2.0 * TOLERANCIA_ESCALERA_Z:
+					continue
+				var horizontal := Vector2(pa.x - pb.x, pa.y - pb.y).length()
+				if horizontal > MARGEN_ESCALERA * 2.0:
+					continue
+
+				var centro := (mn + mx) * 0.5
+				var columnas: Array[Vector2] = [Vector2(pb.x, pb.y), Vector2(pa.x, pa.y),
+					Vector2((pb.x + pa.x) * 0.5, (pb.y + pa.y) * 0.5), Vector2(centro.x, centro.y)]
+			var columna_valida := false
+			var columna := Vector2.ZERO
+			var lateral := INF
+			for xy: Vector2 in columnas:
+				if _distancia_xy_caja(Vector3(xy.x, xy.y, 0.0), mn, mx) > MARGEN_ESCALERA:
+					continue
+				if not _columna_escalera_libre(xy.x, xy.y, pb.z, pa.z):
+					continue
+				if not _segmento_horizontal_libre(pb, xy, pb.z):
+					continue
+				if not _segmento_horizontal_libre(pa, xy, pa.z):
+					continue
+				var desvio := Vector2(pb.x - xy.x, pb.y - xy.y).length() \
+					+ Vector2(pa.x - xy.x, pa.y - xy.y).length()
+				if desvio < lateral:
+					columna = xy
+					lateral = desvio
+					columna_valida = true
+			if not columna_valida:
+				continue
+
+			var puntuacion := float(dato_bajo["dxy"]) + float(dato_alto["dxy"]) \
+				+ 0.5 * (float(dato_bajo["dz"]) + float(dato_alto["dz"])) \
+				+ 0.25 * horizontal + 0.1 * lateral
+			if puntuacion < mejor_puntuacion:
+				mejor_puntuacion = puntuacion
+				mejor_bajo = bajo
+				mejor_alto = alto
+				mejor_columna = columna
+
+		if mejor_bajo < 0 or mejor_alto < 0:
+			continue
+		var p_bajo := posiciones[mejor_bajo]
+		var p_alto := posiciones[mejor_alto]
+		var subida_total := p_alto.z - p_bajo.z
+		var coste := (Vector2(p_bajo.x, p_bajo.y).distance_to(mejor_columna)
+			+ subida_total
+			+ Vector2(p_alto.x, p_alto.y).distance_to(mejor_columna)) * 1.2
+		vecinos[mejor_bajo].append(mejor_alto)
+		costes[mejor_bajo].append(coste)
+		vecinos[mejor_alto].append(mejor_bajo)
+		costes[mejor_alto].append(coste)
+		var clave := Vector2i(mini(mejor_bajo, mejor_alto), maxi(mejor_bajo, mejor_alto))
+		_aristas_escalera[clave] = {
+			"bajo": mejor_bajo,
+			"alto": mejor_alto,
+			"columna": mejor_columna,
+		}
+		_unir_union(padres, rangos, mejor_bajo, mejor_alto)
+		escaleras_conectadas += 1
+
+
 # ------------------------------------------------------------------ consultas
 ## Nodo más cercano a un punto (en metros, coordenadas de Godot).
 func nodo_mas_cercano(p_godot: Vector3) -> int:
@@ -249,11 +427,53 @@ func camino(desde_godot: Vector3, hasta_godot: Vector3) -> PackedVector3Array:
 	var nodos := camino_nodos(a, b)
 	if nodos.is_empty():
 		return PackedVector3Array()
-	var suave := _suavizar(nodos)
 	var salida := PackedVector3Array()
-	for idx in suave:
-		salida.append(BspReader._a_godot(posiciones[idx]))
+	for p in _puntos_camino_goldsrc(nodos):
+		salida.append(BspReader._a_godot(p))
 	return salida
+
+
+## Suaviza solo los tramos caminables e intercala dos puntos verticales en cada
+## escalera. Así A* no pierde la información especial al devolver el camino.
+func _puntos_camino_goldsrc(ruta: PackedInt32Array) -> Array[Vector3]:
+	var salida: Array[Vector3] = []
+	if ruta.is_empty():
+		return salida
+	var tramo := PackedInt32Array([ruta[0]])
+	for i in range(1, ruta.size()):
+		var anterior := ruta[i - 1]
+		var actual := ruta[i]
+		var clave := Vector2i(mini(anterior, actual), maxi(anterior, actual))
+		if not _aristas_escalera.has(clave):
+			tramo.append(actual)
+			continue
+		_agregar_indices_suaves(salida, _suavizar(tramo))
+		var datos: Dictionary = _aristas_escalera[clave]
+		var columna: Vector2 = datos["columna"]
+		var p_bajo: Vector3 = posiciones[int(datos["bajo"])]
+		var p_alto: Vector3 = posiciones[int(datos["alto"])]
+		var abajo := Vector3(columna.x, columna.y, p_bajo.z)
+		var arriba := Vector3(columna.x, columna.y, p_alto.z)
+		if anterior == int(datos["bajo"]):
+			_agregar_punto_unico(salida, abajo)
+			_agregar_punto_unico(salida, arriba)
+		else:
+			_agregar_punto_unico(salida, arriba)
+			_agregar_punto_unico(salida, abajo)
+		_agregar_punto_unico(salida, posiciones[actual])
+		tramo = PackedInt32Array([actual])
+	_agregar_indices_suaves(salida, _suavizar(tramo))
+	return salida
+
+
+func _agregar_indices_suaves(salida: Array[Vector3], ruta: PackedInt32Array) -> void:
+	for idx in ruta:
+		_agregar_punto_unico(salida, posiciones[idx])
+
+
+func _agregar_punto_unico(salida: Array[Vector3], punto: Vector3) -> void:
+	if salida.is_empty() or salida[salida.size() - 1].distance_to(punto) > 0.01:
+		salida.append(punto)
 
 
 ## A* sobre los nodos. Devuelve los índices del camino, del principio al final.

@@ -44,21 +44,28 @@ Lo que falta para que se vean *bien* en juego:
 Hecho (`scripts/bot_ai.gd` + `scripts/nav_grid.gd`): los bots **ven** (campo de
 visión + rayo de línea de visión), **apuntan** con el error del arma y de la
 dificultad, **disparan** en ráfagas, recargan, se mueven de lado en combate y
-**navegan** por un grafo sacado del árbol BSP del mapa. Todo esto **sin
-ejecutar**: lo que está validado en Python es el grafo (10 mapas, objetivos
-alcanzables, 0-0,3 % de atajos falsos) y el modelo de puntería (aciertos/s y
-tiempo para matar).
+**navegan** por un grafo extraído del árbol BSP. Todo esto está escrito pero
+**no ejecutado en Godot**. En Python se ha validado el grafo, las transiciones
+de escaleras y el modelo de puntería; no equivale a probar una partida.
+
+Las escaleras de mano (`func_ladder`) tienen soporte **parcial**: de 34 triggers
+repartidos por los mapas, 20 forman una subida validada en `cs_assault`,
+`cs_estate`, `de_inferno`, `de_nuke` y `de_train`. Se buscan nodos de suelo en
+los dos extremos, se comprueba el cuerpo y la cabeza a lo largo de la columna y
+se conserva un waypoint vertical para que el bot suba/baje a 2,2 m/s. Los otros
+14 triggers se omiten si ya caen en el mismo componente o si el BSP no ofrece
+rellanos y columna libres que pasen las comprobaciones. La validación verifica
+las entradas, los tramos verticales y las salidas en ambos sentidos; aún falta
+verlo funcionar con el motor y las colisiones reales.
 
 Lo que sigue faltando:
 
-- **Escaleras de mano** (`func_ladder`): no se suben. Por eso hay entre un 15 %
-  y un 45 % de nodos inalcanzables según el mapa: son tejados, toldos y
-  cornisas a los que en el original se llega con una escalera o saltando.
-  `tools/nav_validate.py` los cuenta y los marca en la vista previa.
-- **Saltos**: el grafo no modela saltar una caja o un hueco; solo desniveles
-  de hasta 40 unidades.
-- **Puertas** (`func_door`): no se abren. Si la ruta pasa por una puerta
-  cerrada, el bot se queda empujándola.
+- **Saltos**: no se salta sobre cajas ni huecos. El porcentaje del grafo
+  alcanzable desde alguno de los spawns varía entre 47,1 % (`cs_italy`) y
+  95,4 % (`cs_estate`); las partes desconectadas incluyen tejados, toldos y
+  cornisas, y no todas tienen una escalera utilizable.
+- **Puertas** (`func_door`): no se abren. Si una ruta requiere atravesar una
+  puerta cerrada, el bot no la activa.
 - **Granadas** y cuchillo: no los usan.
 - **Oído**: solo reaccionan a lo que ven. No oyen pasos y, aunque el bot dispara
   con sonido, no se avisan entre ellos.
@@ -94,13 +101,13 @@ teclas numéricas, victoria por eliminación / tiempo / bomba. **Sin ejecutar.**
 
 Lo que falta o está a medias:
 
-- **Equipos**: hay dos bandos, pero el jugador es el único que juega. No existe
-  spawn por equipo real: los `info_player_start` del `.bsp` son genéricos y se
-  reaparece siempre en el primer punto guardado.
+- **Equipos**: hay dos bandos y bots, pero el jugador sigue reapareciendo en el
+  primer punto guardado; falta un spawn de jugador configurable por equipo.
 - **Rehenes**: `cs_office` y `cs_italy` tienen `hostage_entity` y
   `func_hostage_rescue`; se leen las zonas pero no hay lógica de rehenes
   (`CsEconomy` ya tiene el importe del rescate).
-- **Bots que disparen**: ver §3.
+- **Prueba de los bots en el motor**: la IA está escrita, pero falta abrir el
+  proyecto en Godot y comprobar una partida real; ver §3.
 - **Mitad de tiempo / cambio de bando** (`mp_halftime`).
 - **Pausa de compra fuera de la congelación**: en el original se puede comprar
   también el primer segundo y medio de la ronda; aquí solo en congelación.
@@ -121,7 +128,7 @@ Half-Life se resuelve copiando el fichero.
 - Sonidos ambientales por mapa (`ambient_generic` en las entidades).
 - Puertas y `func_door`: se leen las entidades pero no se crean.
 - `func_breakable` y cristales.
-- Escaleras (`func_ladder`).
+- Escaleras `func_ladder` parcialmente enlazadas en el grafo; ver §3.
 - Niebla y cielo por mapa (`light_environment` se lee, pero de forma básica).
 - Bots de radio y mensajes de texto del HUD.
 
@@ -132,12 +139,13 @@ Half-Life se resuelve copiando el fichero.
 - Animación de esqueleto (RLE + slerp + skinning GPU) y 215 secuencias
   comprobadas con movimiento real.
 - Render de validación (planos de mapas y vistas de modelos) en `docs/previews/`.
-- Comprobación de la API de Godot 4.4 en los 16 scripts, incluidas las llamadas
+- Comprobación de la API de Godot 4.4 en los 18 scripts, incluidas las llamadas
   y señales entre clases del propio proyecto (`tools/gdscript_check.py`).
 - Constantes, precios y aritmética del modo de juego contrastados con el 1.5 y
   economía simulada en 200 rondas (`tools/partida_validate.py`).
 - Grafo de navegación construido en los 10 mapas: entre 3 793 y 9 853 nodos,
-  todos los objetivos de bomba, compra y rehenes alcanzables, y menos de un
-  0,3 % de conexiones que atraviesan una pared (`tools/nav_validate.py`).
+  todos los objetivos de bomba, compra y rehenes alcanzables; 20 subidas por
+  `func_ladder` probadas en ambos sentidos y 0-0,3 % de atajos en las aristas
+  caminables (`tools/nav_validate.py`).
 - Puntería de los bots medida por simulación: aciertos por segundo y tiempo para
   matar a 5, 10, 20 y 30 m (`tools/bots_validate.py`).
