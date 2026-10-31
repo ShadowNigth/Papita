@@ -327,7 +327,7 @@ func _conectar_escaleras() -> void:
 		if bajos.is_empty() or altos.is_empty():
 			continue
 
-		var mejor_puntuacion := INF
+		var mejor_puntuacion: float = INF
 		var mejor_bajo := -1
 		var mejor_alto := -1
 		var mejor_columna := Vector2.ZERO
@@ -349,35 +349,35 @@ func _conectar_escaleras() -> void:
 				var centro := (mn + mx) * 0.5
 				var columnas: Array[Vector2] = [Vector2(pb.x, pb.y), Vector2(pa.x, pa.y),
 					Vector2((pb.x + pa.x) * 0.5, (pb.y + pa.y) * 0.5), Vector2(centro.x, centro.y)]
-			var columna_valida := false
-			var columna := Vector2.ZERO
-			var lateral := INF
-			for xy: Vector2 in columnas:
-				if _distancia_xy_caja(Vector3(xy.x, xy.y, 0.0), mn, mx) > MARGEN_ESCALERA:
+				var columna_valida := false
+				var columna := Vector2.ZERO
+				var lateral: float = INF
+				for xy: Vector2 in columnas:
+					if _distancia_xy_caja(Vector3(xy.x, xy.y, 0.0), mn, mx) > MARGEN_ESCALERA:
+						continue
+					if not _columna_escalera_libre(xy.x, xy.y, pb.z, pa.z):
+						continue
+					if not _segmento_horizontal_libre(pb, xy, pb.z):
+						continue
+					if not _segmento_horizontal_libre(pa, xy, pa.z):
+						continue
+					var desvio := Vector2(pb.x - xy.x, pb.y - xy.y).length() \
+						+ Vector2(pa.x - xy.x, pa.y - xy.y).length()
+					if desvio < lateral:
+						columna = xy
+						lateral = desvio
+						columna_valida = true
+				if not columna_valida:
 					continue
-				if not _columna_escalera_libre(xy.x, xy.y, pb.z, pa.z):
-					continue
-				if not _segmento_horizontal_libre(pb, xy, pb.z):
-					continue
-				if not _segmento_horizontal_libre(pa, xy, pa.z):
-					continue
-				var desvio := Vector2(pb.x - xy.x, pb.y - xy.y).length() \
-					+ Vector2(pa.x - xy.x, pa.y - xy.y).length()
-				if desvio < lateral:
-					columna = xy
-					lateral = desvio
-					columna_valida = true
-			if not columna_valida:
-				continue
 
-			var puntuacion := float(dato_bajo["dxy"]) + float(dato_alto["dxy"]) \
-				+ 0.5 * (float(dato_bajo["dz"]) + float(dato_alto["dz"])) \
-				+ 0.25 * horizontal + 0.1 * lateral
-			if puntuacion < mejor_puntuacion:
-				mejor_puntuacion = puntuacion
-				mejor_bajo = bajo
-				mejor_alto = alto
-				mejor_columna = columna
+				var puntuacion: float = float(dato_bajo["dxy"]) + float(dato_alto["dxy"]) \
+					+ 0.5 * (float(dato_bajo["dz"]) + float(dato_alto["dz"])) \
+					+ 0.25 * horizontal + 0.1 * lateral
+				if puntuacion < mejor_puntuacion:
+					mejor_puntuacion = puntuacion
+					mejor_bajo = bajo
+					mejor_alto = alto
+					mejor_columna = columna
 
 		if mejor_bajo < 0 or mejor_alto < 0:
 			continue
@@ -519,12 +519,12 @@ func camino_nodos(desde: int, hasta: int) -> PackedInt32Array:
 		if guardas > n * 4:
 			break        # grafo corrupto: no colgarse
 		var vecs := vecinos[actual]
-		var cos := costes[actual]
+		var costes_vecinos := costes[actual]
 		for i in vecs.size():
 			var v := vecs[i]
 			if cerrado[v] == 1:
 				continue
-			var nuevo := g[actual] + cos[i]
+			var nuevo := g[actual] + costes_vecinos[i]
 			if nuevo < g[v]:
 				g[v] = nuevo
 				previo[v] = actual
@@ -586,7 +586,7 @@ class _Monticulo:
 		if _nodos.is_empty():
 			return -1
 		var cima := _nodos[0]
-		var ultimo_n := _nodos.pop_back()
+		var ultimo_n: int = _nodos.pop_back()
 		var ultimo_c: float = _costes.pop_back()
 		if not _nodos.is_empty():
 			_nodos[0] = ultimo_n
