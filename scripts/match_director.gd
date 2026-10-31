@@ -260,6 +260,11 @@ func _on_bomba_explotada(_pos: Vector3) -> void:
 	_terminar_ronda("t", "bomba_explota")
 
 
+## Cuántos enemigos siguen en pie (lo enseña el HUD).
+func enemigos_vivos() -> int:
+	return _enemigos_vivos()
+
+
 func _enemigos_vivos() -> int:
 	var n := 0
 	for a in actores:

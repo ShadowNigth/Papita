@@ -25,6 +25,8 @@ spawns y el círculo naranja el sitio de bomba A/B.*
 | Construcción del mapa en Godot (malla + colisión + atlas de luz) | escrito, **sin ejecutar** |
 | Jugador, armas, audio, HUD | escrito, **sin ejecutar** |
 | Modo de juego: rondas, economía, compra, C4 | escrito, **sin ejecutar** |
+| Grafo de navegación sacado del `.bsp` | **validado** en los 10 mapas (Python) |
+| IA de los bots: ver, apuntar, disparar y moverse | escrita, **sin ejecutar** |
 | Compilar el motor Godot | **no disponible en el entorno donde se escribió** |
 
 Lo que sí está comprobado, y cómo:
@@ -58,6 +60,9 @@ godot --path . -- --map de_dust2
 godot --path . -- --map de_nuke --arma awp
 godot --path . -- --map de_dust2 --equipo t     # empezar como terrorista
 godot --path . -- --map de_dust2 --rondas 10    # partida de 10 rondas
+godot --path . -- --map de_dust2 --bots 8       # 8 bots (por defecto 4)
+godot --path . -- --map de_dust2 --bots 0       # mapa vacío, para pasear
+godot --path . -- --map de_dust2 --skill 2      # bots difíciles (0, 1, 2)
 ```
 
 Si no pasas `--map`, carga `de_dust2`.
@@ -122,6 +127,37 @@ Constantes del motor original, en unidades GoldSrc convertidas a metros:
 dispersión que empeora al moverse o en el aire, perdigones en las escopetas,
 recarga y retroceso con el viewmodel original.
 
+### Bots
+
+Los soldados que deambulan por el mapa **juegan**: ven al jugador si están en su
+campo de visión y hay línea de visión (rayo contra la geometría real del mapa),
+apuntan con el error del arma y de la dificultad, disparan en ráfagas de 3 a 6
+balas, recargan y se mueven de lado en combate. Si te pierden, van a tu última
+posición; si no te han visto nunca, patrullan hacia el sitio de bomba (si son
+terroristas) o hacia puntos del mapa.
+
+Se mueven por un **grafo de navegación sacado del propio `.bsp`**, no del aire:
+
+* El árbol BSP (planos, nodos y hojas) responde si un punto es sólido, igual
+  que hacía `SV_PointContents` en GoldSrc.
+* Se muestrean las caras del modelo 0 cuya normal mira hacia arriba, cada 40
+  unidades (1 m), aceptando solo los puntos donde cabe el actor de pie.
+* Se conectan los nodos vecinos con un descalón menor que 40 unidades, así que
+  las escaleras y rampas del original se recorren sin trucos.
+* El camino sale de un A* sobre esos nodos y se **suaviza** con cortes en línea
+  recta, para que no caminen como en una rejilla.
+
+Tres niveles (`--skill 0|1|2`), con los nombres de los `bot_skill` del original:
+
+| Nivel | Reacción | Error de puntería | Visión | Aciertos a 10 m |
+|---|---|---|---|---|
+| fácil | 0,65 s | 3,2° | 45 m | ~90 % |
+| normal | 0,38 s | 2,0° | 60 m | ~99 % |
+| difícil | 0,22 s | 1,1° | 80 m | 100 % |
+
+Los porcentajes no son inventados: `tools/bots_validate.py` replica el modelo de
+disparo y los mide a 5, 10, 20 y 30 m.
+
 ### Modo de juego
 
 Una partida de verdad sobre los `.bsp` originales, con los tiempos del 1.5:
@@ -175,6 +211,8 @@ scripts/
   bomb.gd               C4: cuenta atras, pitidos, desactivacion, explosion
   match_director.gd     rondas, economia, objetivos y fin de ronda
   buy_menu.gd           menu de compra numerico estilo original
+  nav_grid.gd           grafo de navegacion sacado del arbol BSP del mapa
+  bot_ai.gd             percepcion, punteria y movimiento de los bots
 
 shaders/brush.gdshader  textura + lightmap sin luces dinamicas
 assets/                 material original de Valve (local, no se publica)
@@ -216,6 +254,8 @@ redistribuye. Ver `docs/AVISO_LEGAL.md`.)
 pip install numpy pillow gdtoolkit
 python3 tools/cs15_validate.py    # 96 modelos + 10 mapas + PNGs
 python3 tools/partida_validate.py # modo de juego: constantes, precios, economia
+python3 tools/nav_validate.py     # grafo de navegacion de los 10 mapas + PNGs
+python3 tools/bots_validate.py    # punteria y daño por segundo de los bots
 python3 tools/gdscript_check.py   # sintaxis, API de 4.4, cruces entre scripts
 ```
 
@@ -230,7 +270,17 @@ animaciones: 215/261 secuencias evaluadas se mueven (0 problemas)
   economica simulada en 200 rondas sin salirse de [0, 16000]
   problemas: 0
 
-16 scripts revisados, 0 problemas
+== MODO DE JUEGO ==
+  constantes y precios del 1.5 contrastados
+  economica simulada en 200 rondas sin salirse de [0, 16000]
+  problemas: 0
+
+mapa           suelo   nodos  aristas  alcanza  atajos      s  objetivos
+de_dust2         658    5391    18144    84.9%    0.0%   0.97  4/4
+...
+problemas: 0
+
+18 scripts revisados, 0 problemas
 ```
 
 `partida_validate.py` lee las constantes de `economy.gd`, `match_director.gd` y

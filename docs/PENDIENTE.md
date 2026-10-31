@@ -41,15 +41,33 @@ Lo que falta para que se vean *bien* en juego:
 
 ## 3. Bots
 
-Los actores que deambulan por el mapa **no son IA**: se mueven en línea recta
-entre puntos de aparición y pueden atravesar paredes. No hay navegación. `legacy/xash/` sí los tenía (los de ReGameDLL); aquí habría que
-escribir navegación propia. La opción razonable es usar los `clipnodes` y las
-hojas del `.bsp` para construir un grafo de puntos de navegación, en vez de
-inventar un NavMesh sobre geometría ya particionada.
+Hecho (`scripts/bot_ai.gd` + `scripts/nav_grid.gd`): los bots **ven** (campo de
+visión + rayo de línea de visión), **apuntan** con el error del arma y de la
+dificultad, **disparan** en ráfagas, recargan, se mueven de lado en combate y
+**navegan** por un grafo sacado del árbol BSP del mapa. Todo esto **sin
+ejecutar**: lo que está validado en Python es el grafo (10 mapas, objetivos
+alcanzables, 0-0,3 % de atajos falsos) y el modelo de puntería (aciertos/s y
+tiempo para matar).
 
-Desde el modo de juego sí hacen de **contrario**: tienen vida, reciben daño,
-mueren, sueltan el cadáver y la ronda se cierra cuando no queda ninguno vivo.
-Lo que no hacen: disparar al jugador ni moverse con criterio.
+Lo que sigue faltando:
+
+- **Escaleras de mano** (`func_ladder`): no se suben. Por eso hay entre un 15 %
+  y un 45 % de nodos inalcanzables según el mapa: son tejados, toldos y
+  cornisas a los que en el original se llega con una escalera o saltando.
+  `tools/nav_validate.py` los cuenta y los marca en la vista previa.
+- **Saltos**: el grafo no modela saltar una caja o un hueco; solo desniveles
+  de hasta 40 unidades.
+- **Puertas** (`func_door`): no se abren. Si la ruta pasa por una puerta
+  cerrada, el bot se queda empujándola.
+- **Granadas** y cuchillo: no los usan.
+- **Oído**: solo reaccionan a lo que ven. No oyen pasos y, aunque el bot dispara
+  con sonido, no se avisan entre ellos.
+- **Trabajo en equipo**: dos bots no se coordinan ni cubren ángulos distintos.
+- **Rehenes**: no los escoltan ni los recogen (`cs_office`, `cs_italy`).
+- **No distinguen cabeza del cuerpo**: el daño que hacen es plano y el que
+  reciben es plano × 1,6 (`actor_model.gd`, que tampoco separa zonas).
+- **Ajuste fino**: los números de puntería salen de simulación, no de jugar. Es
+  lo primero que habrá que retocar cuando se pueda pulsar F5.
 
 ## 4. Granadas y C4
 
@@ -118,3 +136,8 @@ Half-Life se resuelve copiando el fichero.
   y señales entre clases del propio proyecto (`tools/gdscript_check.py`).
 - Constantes, precios y aritmética del modo de juego contrastados con el 1.5 y
   economía simulada en 200 rondas (`tools/partida_validate.py`).
+- Grafo de navegación construido en los 10 mapas: entre 3 793 y 9 853 nodos,
+  todos los objetivos de bomba, compra y rehenes alcanzables, y menos de un
+  0,3 % de conexiones que atraviesan una pared (`tools/nav_validate.py`).
+- Puntería de los bots medida por simulación: aciertos por segundo y tiempo para
+  matar a 5, 10, 20 y 30 m (`tools/bots_validate.py`).

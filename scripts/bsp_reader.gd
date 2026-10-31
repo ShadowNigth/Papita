@@ -58,6 +58,21 @@ var texturas: Array[Dictionary] = []
 var luz_ofs: int = 0
 var luz_len: int = 0
 
+# --- arbol BSP para saber si un punto es solido (lo usan los bots) ---------
+# planos: normal (3 floats) + dist + tipo; nodos: plano + 2 hijos; hojas:
+# contenido. Es lo que respondia `SV_PointContents` en GoldSrc.
+var planos_normal: PackedVector3Array = PackedVector3Array()
+var planos_dist: PackedFloat32Array = PackedFloat32Array()
+var nodos_plano: PackedInt32Array = PackedInt32Array()
+var nodos_hijos: PackedInt32Array = PackedInt32Array()      # 2 por nodo
+var hojas_contenido: PackedInt32Array = PackedInt32Array()
+var cara_lado: PackedInt32Array = PackedInt32Array()
+## Vertices en unidades GoldSrc (sin convertir): el grafo de navegacion razona
+## en las unidades del original y convierte al final.
+var vertices_goldsrc: PackedVector3Array = PackedVector3Array()
+var mundo_primera_cara: int = 0
+var mundo_num_caras: int = 0
+
 var errores: Array[String] = []
 ## Brush models (lump 14). El lump NO lleva contador: son dmodel_t de 64 bytes
 ## seguidos. El modelo 0 es el mundo; el resto son los "model *N" de las
@@ -99,6 +114,7 @@ func _leer(paleta: CsPalette) -> void:
 	_leer_texinfo()
 	_leer_texturas(paleta)
 	_leer_caras()
+	_leer_arbol()
 
 	luz_ofs = lumps_ofs[LUMP_LUZ]
 	luz_len = lumps_len[LUMP_LUZ]
@@ -227,13 +243,13 @@ func _leer_vertices() -> void:
 	var bruto := _trozo(LUMP_VERTICES)
 	var n := bruto.size() / 12
 	vertices.resize(n)
+	vertices_goldsrc.resize(n)
 	for i in n:
 		var o := i * 12
-		vertices[i] = Vector3(
-			bruto.decode_float(o),
-			bruto.decode_float(o + 8),   # Z de GoldSrc -> Y de Godot
-			-bruto.decode_float(o + 4)   # Y de GoldSrc -> -Z de Godot
-		) * ESCALA
+		var g := Vector3(bruto.decode_float(o), bruto.decode_float(o + 4),
+			bruto.decode_float(o + 8))
+		vertices_goldsrc[i] = g
+		vertices[i] = _a_godot(g)
 
 
 func _leer_texinfo() -> void:
@@ -310,9 +326,11 @@ func _leer_caras() -> void:
 	cara_numedges.resize(n)
 	cara_texinfo.resize(n)
 	cara_lightofs.resize(n)
+	cara_lado.resize(n)
 	for i in n:
 		var o := i * TAM_CARA
 		cara_plano[i] = bruto.decode_s16(o)
+		cara_lado[i] = bruto.decode_s16(o + 2)
 		cara_firstedge[i] = bruto.decode_s32(o + 4)
 		cara_numedges[i] = bruto.decode_s16(o + 8)
 		cara_texinfo[i] = bruto.decode_s16(o + 10)
@@ -329,6 +347,78 @@ func _leer_caras() -> void:
 	for i in na:
 		aristas[i * 2] = bruto_ar.decode_u16(i * 4)
 		aristas[i * 2 + 1] = bruto_ar.decode_u16(i * 4 + 2)
+
+
+## Lee planos (lump 1), nodos (lump 5) y hojas (lump 10), y saca del modelo 0
+## el rango de caras del mundo. Con eso `contenido()` responde en O(profundidad)
+## si un punto es solido, igual que hacia el motor original.
+func _leer_arbol() -> void:
+	var bruto_p := _trozo(LUMP_PLANOS)
+	var np := bruto_p.size() / 20
+	planos_normal.resize(np)
+	planos_dist.resize(np)
+	for i in np:
+		var o := i * 20
+		planos_normal[i] = Vector3(bruto_p.decode_float(o), bruto_p.decode_float(o + 4),
+			bruto_p.decode_float(o + 8))
+		planos_dist[i] = bruto_p.decode_float(o + 12)
+
+	var bruto_n := _trozo(LUMP_NODOS)
+	var nn := bruto_n.size() / 24
+	nodos_plano.resize(nn)
+	nodos_hijos.resize(nn * 2)
+	for i in nn:
+		var o := i * 24
+		nodos_plano[i] = bruto_n.decode_s32(o)
+		nodos_hijos[i * 2] = bruto_n.decode_s16(o + 4)
+		nodos_hijos[i * 2 + 1] = bruto_n.decode_s16(o + 6)
+
+	var bruto_h := _trozo(LUMP_HOJAS)
+	var nh := bruto_h.size() / 28
+	hojas_contenido.resize(nh)
+	for i in nh:
+		hojas_contenido[i] = bruto_h.decode_s32(i * 28)
+
+	# dmodel_t 0: firstface/numfaces van en los bytes 56 y 60.
+	if not modelos.is_empty():
+		var base := lumps_ofs[LUMP_MODELOS]
+		mundo_primera_cara = datos.decode_s32(base + 56)
+		mundo_num_caras = datos.decode_s32(base + 60)
+
+
+## Contenido del punto, en coordenadas de Godot: -1 vacio, -2 solido,
+## -3 agua. Los puntos fuera del mapa son solidos, como en el original.
+func contenido(p: Vector3) -> int:
+	var g := _a_goldsrc(p)
+	return contenido_goldsrc(g)
+
+
+## Igual que `contenido()` pero en unidades GoldSrc (lo usa el grafo de
+## navegacion, que razona en las unidades del original).
+func contenido_goldsrc(p: Vector3) -> int:
+	if planos_normal.is_empty() or nodos_hijos.is_empty():
+		return -1
+	var nodo := 0
+	var guardas := 0
+	while nodo >= 0:
+		var plano := nodos_plano[nodo]
+		if plano < 0 or plano >= planos_normal.size():
+			return -1
+		var n := planos_normal[plano]
+		var d := n.dot(p) - planos_dist[plano]
+		nodo = nodos_hijos[nodo * 2] if d >= 0.0 else nodos_hijos[nodo * 2 + 1]
+		guardas += 1
+		if guardas > 4096:
+			return -1        # arbol corrupto: se trata como vacio
+	var hoja := -nodo - 1
+	if hoja < 0 or hoja >= hojas_contenido.size():
+		return -1
+	return hojas_contenido[hoja]
+
+
+## Pasa un punto de Godot a las unidades del original (inversa de `_a_godot`).
+static func _a_goldsrc(p: Vector3) -> Vector3:
+	return Vector3(p.x / ESCALA, -p.z / ESCALA, p.y / ESCALA)
 
 
 ## Indices de vertice de una cara, en orden (puede ser un poligono).

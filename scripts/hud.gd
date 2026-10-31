@@ -18,6 +18,8 @@ var fase: String = "Congelación"
 var tiempo_ronda: float = 0.0
 var tiempo_bomba: float = -1.0
 var aviso_bomba: String = ""
+## Enemigos que quedan vivos; -1 = no se sabe (sin partida).
+var enemigos: int = -1
 
 var _fuente: Font
 var _tiempo_mensaje: float = 0.0
@@ -98,6 +100,10 @@ func _draw() -> void:
 		Color(1.0, 0.4, 0.35) if tiempo_ronda < 30.0 else Color(0.95, 0.95, 0.95))
 	_dibujar_texto(Vector2(centro.x - _fuente.get_string_size(fase, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x * 0.5, 70),
 		fase, 12, Color(0.65, 0.7, 0.75))
+	if enemigos >= 0:
+		var vivos := "quedan %d" % enemigos
+		_dibujar_texto(Vector2(centro.x - _fuente.get_string_size(vivos, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x * 0.5, 86),
+			vivos, 11, Color(0.8, 0.75, 0.55))
 
 	# --- dinero, debajo de la salud ---
 	_dibujar_texto(Vector2(28, tam.y - 92), "%d$" % dinero, 20, Color(0.65, 0.95, 0.65))

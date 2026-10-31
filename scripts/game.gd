@@ -31,12 +31,15 @@ var info_mapa: Dictionary = {}
 
 var _nodo_mapa: Node3D
 var _actores: Array[ActorModel] = []
-var _actores_meta: Array[Dictionary] = []
 var director: MatchDirector
 var menu_compra: BuyMenu
+var nav: NavGrid
 var equipo_jugador: String = "ct"
+var _bots: Array[BotAI] = []
+## 0 = fácil, 1 = normal, 2 = difícil (se cambia con `--skill`)
+var dificultad: int = 1
 
-## Cuantos soldados animados se colocan (0 = ninguno). Se puede cambiar con
+## Cuantos bots se colocan (0 = ninguno). Se puede cambiar con `--bots N` o
 ## `--actores N` en la linea de comandos.
 var num_actores: int = 4
 
@@ -60,9 +63,12 @@ func _leer_argumentos() -> void:
 			"--arma":
 				if i + 1 < args.size():
 					set_meta("arma_inicial", args[i + 1])
-			"--actores":
+			"--actores", "--bots":
 				if i + 1 < args.size():
 					num_actores = int(args[i + 1])
+			"--skill", "--dificultad":
+				if i + 1 < args.size():
+					dificultad = int(args[i + 1])
 			"--secuencia":
 				if i + 1 < args.size():
 					set_meta("secuencia_forzada", args[i + 1])
@@ -114,10 +120,15 @@ func cargar_mapa(id: String) -> void:
 	_nodo_mapa = info_mapa["nodo"] as Node3D
 	add_child(_nodo_mapa)
 
+	# El grafo de navegación sale del propio .bsp (árbol BSP + caras de suelo).
+	nav = NavGrid.construir(bsp)
+	print("[papita] ", nav.resumen() if nav.valido() else "sin grafo de navegación")
+
 	_colocar_jugador()
 	_colocar_actores()
 	_crear_hud()
 	_crear_director()
+	_crear_bots()
 	_crear_fondo()
 
 
@@ -154,7 +165,6 @@ func _colocar_actores() -> void:
 		if is_instance_valid(a):
 			a.queue_free()
 	_actores.clear()
-	_actores_meta.clear()
 	if num_actores <= 0:
 		return
 
@@ -177,7 +187,7 @@ func _colocar_actores() -> void:
 			actor.queue_free()
 			continue
 		actor.equipo = "t" if _equipo_valido() == "ct" else "ct"
-		var destino := spawns[randi() % spawns.size()]
+		var destino := _spawn_lejos(jugador.global_position if jugador != null else Vector3.ZERO)
 		actor.position = destino + Vector3(0, 0.1, 0)
 		add_child(actor)
 		var forzada := String(get_meta("secuencia_forzada", ""))
@@ -186,55 +196,34 @@ func _colocar_actores() -> void:
 		else:
 			actor.reproducir("idle1")
 		_actores.append(actor)
-		_actores_meta.append({
-			"objetivo": spawns[randi() % spawns.size()],
-			"pausa": randf_range(0.5, 3.0),
-		})
 	print("[papita] %d actores animados (%s)" % [
 		_actores.size(), ", ".join(a.secuencias_disponibles().slice(0, 6))])
 
 
+## Crea la IA de cada actor. Los bots son del bando contrario al jugador.
+func _crear_bots() -> void:
+	_bots.clear()
+	if _actores.is_empty():
+		return
+	for actor in _actores:
+		if not is_instance_valid(actor):
+			continue
+		var bot := BotAI.new()
+		bot.name = "ia_" + String(actor.name)
+		actor.add_child(bot)
+		bot.configurar(actor, jugador, nav, actor.equipo, dificultad)
+		_bots.append(bot)
+	print("[papita] %d bots (%s)" % [_bots.size(), _bots[0].nombre_dificultad()])
+
+
 func _process(delta: float) -> void:
-	_mover_actores(delta)
-
-
-func _mover_actores(delta: float) -> void:
-	for i in _actores.size():
-		var actor := _actores[i]
-		if not is_instance_valid(actor) or actor.lector == null:
-			continue
-		var meta: Dictionary = _actores_meta[i]
-		var pausa: float = float(meta.get("pausa", 0.0))
-		if pausa > 0.0:
-			meta["pausa"] = pausa - delta
-			actor.animar_por_velocidad(0.0)
-			continue
-		var objetivo: Vector3 = meta["objetivo"]
-		var plano := Vector3(objetivo.x, actor.position.y, objetivo.z)
-		var distancia := actor.position.distance_to(plano)
-		if distancia < 0.6:
-			# destino alcanzado: descansa y elige otro
-			meta["objetivo"] = _punto_aleatorio()
-			meta["pausa"] = randf_range(0.4, 2.0)
-			continue
-		var direccion := (plano - actor.position).normalized()
-		var rapidez := 3.4
-		actor.position += direccion * rapidez * delta
-		# Los modelos de GoldSrc estan modelados mirando hacia +X. `look_at`
-		# orientaria -Z hacia el objetivo, asi que se calcula el giro a mano:
-		# rotation.y = t lleva el +X local a (cos t, 0, -sin t).
-		actor.rotation.y = atan2(-direccion.z, direccion.x)
-		actor.animar_por_velocidad(rapidez)
-
-
-func _punto_aleatorio() -> Vector3:
-	# assign() convierte el Array sin tipo del Dictionary a Array[Vector3];
-	# una asignacion directa es error de ejecucion en Godot 4.
-	var spawns: Array[Vector3] = []
-	spawns.assign(info_mapa.get("spawns", []))
-	if spawns.is_empty():
-		return Vector3.ZERO
-	return spawns[randi() % spawns.size()]
+	# Durante la congelación y el final de ronda los bots no se mueven ni
+	# disparan, igual que el jugador.
+	var quietos := director == null or director.estado == MatchDirector.Estado.CONGELACION \
+		or director.estado == MatchDirector.Estado.FIN_RONDA
+	for bot in _bots:
+		if is_instance_valid(bot):
+			bot.congelar(quietos)
 
 
 ## Crea el director de partida (rondas, economía, objetivos) y el menú de compra.
@@ -277,6 +266,7 @@ func _on_estado_partida(estado: int, restante: float) -> void:
 		return
 	hud.tiempo_ronda = restante
 	hud.marcador = director.marcador()
+	hud.enemigos = director.enemigos_vivos()
 	match estado:
 		MatchDirector.Estado.CONGELACION:
 			hud.fase = "Congelación · compra (B)"
@@ -307,6 +297,22 @@ func _on_dinero(cantidad: int) -> void:
 		hud.dinero = cantidad
 
 
+## Un punto de aparición lejos de `de`. Nacer al lado del jugador y que te
+## maten antes de ver nada no es un juego, es una emboscada.
+func _spawn_lejos(de: Vector3, minimo: float = 10.0) -> Vector3:
+	var mejor := _punto_aleatorio()
+	var mejor_d := -1.0
+	for i in 12:
+		var punto := _punto_aleatorio()
+		var d := punto.distance_to(de)
+		if d >= minimo:
+			return punto
+		if d > mejor_d:
+			mejor = punto
+			mejor_d = d
+	return mejor
+
+
 func _on_ronda_iniciada(numero: int) -> void:
 	# Al morir se libera el raton; la ronda nueva lo vuelve a capturar salvo que
 	# el menu de compra este abierto.
@@ -314,6 +320,13 @@ func _on_ronda_iniciada(numero: int) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if hud != null and is_instance_valid(hud):
 		hud.ronda = numero
+	# Los bots vuelven a su sitio lejos del jugador y con el cargador lleno.
+	for actor in _actores:
+		if is_instance_valid(actor) and actor.vivo:
+			actor.global_position = _spawn_lejos(jugador.global_position)
+	for bot in _bots:
+		if is_instance_valid(bot):
+			bot.reiniciar()
 	print("[papita] ronda ", numero, " | ", director.marcador())
 
 

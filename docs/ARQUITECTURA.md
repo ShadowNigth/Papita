@@ -102,6 +102,49 @@ CONGELACION --(6 s)--> EN_JUEGO --(bomba)--> BOMBA_PLANTADA
   (reloj, marcador, dinero, fase, tiempo de bomba) a campos del HUD. Así el HUD
   sigue pudiendo dibujarse sin partida, por ejemplo en la pantalla de prueba.
 
+## Bots y navegación
+
+Un bot es un `ActorModel` (el `.mdl` animado) más un `BotAI` hijo que lo mueve y
+le da vida de combate. El actor no sabe nada de IA y la IA no sabe nada de
+esqueletos: uno pone la animación y el otro decide a dónde ir.
+
+El movimiento no usa `NavigationServer3D` ni un NavMesh horneado a mano. Se
+construye un grafo propio a partir del `.bsp`, que es lo que hace posible
+navegar sin importadores ni pasos previos:
+
+```
+lump 1 planos ─┐
+lump 5 nodos  ─┼─► contenido(punto)  ──►  ¿es sólido?  ──►  muestreo de caras de suelo
+lump 10 hojas ─┘                                              (40 u, cabe el actor)
+                                                                     │
+                                            A*  ◄── nodos + aristas ──┘
+                                             │
+                                    suavizado por línea recta
+```
+
+**Por qué el árbol BSP y no rayos físicos.** El mapa ya está particionado: un
+punto se resuelve bajando por el árbol, sin tocar el motor de física ni depender
+de que la malla de colisión esté bien. Es el mismo dato que usaba GoldSrc, así
+que la respuesta coincide con la del original en casos raros (esquinas, rampas).
+
+**Por qué no se encoge cada cara.** Primero se probó a encoger cada polígono
+para dejar margen a la pared, y salió un grafo con el 4 % de los nodos: el suelo
+de un mapa no es una cara, son cientos de trozos cortados por textura y por
+hoja, y encoger cada trozo deja los corredores partidos en tiras que no dan ni
+un punto. La solución que funciona es muestrear la cara entera y comprobar el
+hueco alrededor del punto con el propio árbol.
+
+**Qué se considera "se puede andar".** Caras del modelo 0 cuya normal mira hacia
+arriba (coseno ≥ 0,6), sin texturas de cielo, clip ni agua; puntos donde caben
+el cuerpo y la cabeza del actor; y aristas entre nodos vecinos con un desnivel
+de hasta 40 unidades, que es lo que permite subir las escaleras del original sin
+modelarlas.
+
+**Lo que no hay.** Escaleras de mano, saltos y puertas: por eso hay un 15-45 %
+de nodos inalcanzables según el mapa (tejados y cornisas), y `PENDIENTE.md` lo
+lista como deuda. Si A* no encuentra ruta, el bot va en línea recta: se queda
+pegado a la pared, pero no se queda quieto.
+
 ## Los tres niveles de verificación
 
 Este proyecto no se pudo ejecutar en el entorno donde se escribió, así que se

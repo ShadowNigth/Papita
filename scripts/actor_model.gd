@@ -23,11 +23,14 @@ var velocidad: float = 1.0
 var bucle: bool = true
 var errores: Array[String] = []
 
-## Vida y estado de combate. El actor es un blanco simple: no dispara.
+## Vida y estado de combate. Quien dispara es `BotAI`; el actor solo se anima.
 var vida: int = 100
 var vivo: bool = true
 var equipo: String = "t"
 var _golpe: StaticBody3D
+## Tiempo que queda de la animación de disparo; mientras dura no se deja
+## sobrescribir por la de caminar.
+var _disparo: float = 0.0
 
 
 func cargar(fichero: String, paleta: CsPalette) -> bool:
@@ -73,6 +76,26 @@ func _crear_caja_de_golpe() -> void:
 	add_child(_golpe)
 
 
+## Cuerpo sólido del actor (para rayos y para excluirlo de los propios).
+func cuerpo() -> StaticBody3D:
+	return _golpe
+
+
+func tiene_cuerpo() -> bool:
+	return _golpe != null and is_instance_valid(_golpe)
+
+
+## Animación de disparo, si el modelo trae alguna de las de `shoot`.
+func animar_disparo() -> void:
+	if lector == null:
+		return
+	for nombre: String in ["shoot1", "shoot2", "shoot3", "crouch_shoot1"]:
+		if lector.indice_secuencia(nombre) >= 0:
+			reproducir(nombre, 1.0, false)
+			_disparo = 0.22
+			return
+
+
 func _enganchar_esqueleto() -> void:
 	if instancia == null or esqueleto == null:
 		return
@@ -109,6 +132,8 @@ func reproducir(nombre: String, vel: float = 1.0, repetir: bool = true) -> bool:
 ## Elige animación según lo rápido que se mueva el actor (m/s).
 func animar_por_velocidad(metros_por_segundo: float, agachado: bool = false) -> void:
 	if lector == null:
+		return
+	if _disparo > 0.0:
 		return
 	if agachado:
 		if metros_por_segundo < 0.2:
@@ -179,6 +204,8 @@ func _process(delta: float) -> void:
 	var fps: float = maxf(1.0, float(desc["fps"]))
 	var total := maxf(1.0, float(desc["cuadros"]) - 1.0)
 
+	if _disparo > 0.0:
+		_disparo = maxf(0.0, _disparo - delta)
 	tiempo += delta * velocidad
 	var cuadro := tiempo * fps
 	if cuadro >= total:
