@@ -18,6 +18,8 @@ Lo más probable que haya que tocar en la primera ejecución:
   puede quedarse corto (se detiene en 4096×4096 y las caras sobrantes quedan a
   luz plena). Se nota como zonas "quemadas".
 - **`SurfaceTool.generate_normals()`** en caras degeneradas puede avisar.
+- **Puertas móviles**: aún hay que comprobar en Godot la sincronización de
+  `AnimatableBody3D`, sus colisiones y la detección por proximidad.
 - **Rendimiento del atlas**: se generan ~5000 caras por mapa con llamadas
   `set_pixel` una a una. `de_nuke` (7670 caras) puede tardar segundos. La
   solución es volcar el lightmap a `PackedByteArray` y crear la `Image` de una
@@ -64,8 +66,10 @@ Lo que sigue faltando:
   alcanzable desde alguno de los spawns varía entre 47,1 % (`cs_italy`) y
   95,4 % (`cs_estate`); las partes desconectadas incluyen tejados, toldos y
   cornisas, y no todas tienen una escalera utilizable.
-- **Puertas** (`func_door`): no se abren. Si una ruta requiere atravesar una
-  puerta cerrada, el bot no la activa.
+- **Puertas**: `func_door` y `func_door_rotating` ya se separan de la malla
+  estática y se mueven con su colisión. Se abren automáticamente al acercarse
+  jugador o bot; aún no se procesan botones, `target`/`targetname`, bloqueos ni
+  la bandera de “solo usar”. El grafo de navegación no modela estados de puerta.
 - **Granadas** y cuchillo: no los usan.
 - **Oído**: solo reaccionan a lo que ven. No oyen pasos y, aunque el bot dispara
   con sonido, no se avisan entre ellos.
@@ -126,7 +130,9 @@ Half-Life se resuelve copiando el fichero.
 
 - Sprites (`.spr`): miras, humo, sangre, iconos del HUD. No están en `assets/`.
 - Sonidos ambientales por mapa (`ambient_generic` en las entidades).
-- Puertas y `func_door`: se leen las entidades pero no se crean.
+- Entidades de activación de puertas: los brushes móviles funcionan por
+  proximidad, pero no por botones/cadenas `target`; también falta ajustar su
+  interacción con la navegación de bots.
 - `func_breakable` y cristales.
 - Escaleras `func_ladder` parcialmente enlazadas en el grafo; ver §3.
 - Niebla y cielo por mapa (`light_environment` se lee, pero de forma básica).
@@ -139,7 +145,7 @@ Half-Life se resuelve copiando el fichero.
 - Animación de esqueleto (RLE + slerp + skinning GPU) y 215 secuencias
   comprobadas con movimiento real.
 - Render de validación (planos de mapas y vistas de modelos) en `docs/previews/`.
-- Comprobación de la API de Godot 4.4 en los 18 scripts, incluidas las llamadas
+- Comprobación de la API de Godot 4.4 en los 19 scripts, incluidas las llamadas
   y señales entre clases del propio proyecto (`tools/gdscript_check.py`).
 - Constantes, precios y aritmética del modo de juego contrastados con el 1.5 y
   economía simulada en 200 rondas (`tools/partida_validate.py`).

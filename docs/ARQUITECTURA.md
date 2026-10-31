@@ -160,11 +160,21 @@ en ejes Godot. Al invertir Y, se ordenan las esquinas transformadas antes de
 crear el `AABB`: así `has_point()` y las cajas de compra/bomba tienen tamaño no
 negativo.
 
-**Lo que no hay.** Saltos y puertas: por eso la fracción alcanzable desde alguno
-de los spawns va del 47,1 % al 95,4 %, según el mapa. Lo que queda separado
-incluye tejados y cornisas; no debe confundirse ese porcentaje del grafo con
-una medida de superficie jugable. Si A* no encuentra ruta, el bot usa el
-fallback en línea recta. Ver `PENDIENTE.md` para las limitaciones.
+**Puertas (`func_door`, `func_door_rotating`).** El lector conserva `firstface`
+y `numfaces` de cada `dmodel_t`; `MapBuilder` retira esas caras del mundo
+estático y construye por brush una malla con su textura/lightmap y un cuerpo
+`AnimatableBody3D`. `MapDoor` interpreta `angle`/`angles`, `lip`, `speed`,
+`distance`, `wait` y algunas banderas; abre al acercarse jugador o bot y luego
+se cierra (salvo `wait < 0`/no-auto-return). Las 27 entidades de cinco mapas
+pasan las comprobaciones estáticas de `tools/doors_validate.py`.
+
+Es una interacción deliberadamente sencilla: no se procesan botones ni cadenas
+`target`, cerraduras o “solo usar”; los bots no incorporan puertas en su grafo y
+su activación todavía no se ha probado en Godot. Tampoco hay saltos: por eso la
+fracción alcanzable desde alguno de los spawns va del 47,1 % al 95,4 %, según el
+mapa. Las partes separadas incluyen tejados y cornisas; ese porcentaje del grafo
+no mide la superficie jugable. Si A* no encuentra ruta, el bot usa el fallback
+en línea recta. Ver `PENDIENTE.md` para las limitaciones.
 
 ## Los tres niveles de verificación
 

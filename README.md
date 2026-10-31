@@ -26,6 +26,7 @@ spawns y el círculo naranja el sitio de bomba A/B.*
 | Jugador, armas, audio, HUD | escrito, **sin ejecutar** |
 | Modo de juego: rondas, economía, compra, C4 | escrito, **sin ejecutar** |
 | Grafo de navegación sacado del `.bsp` | **validado** en los 10 mapas; 20 subidas por escalera verificadas (Python) |
+| Puertas `func_door` / `func_door_rotating` | implementadas con movimiento y apertura por proximidad; 27 brush models validados estáticamente, **sin ejecutar en Godot** |
 | IA de los bots: ver, apuntar, disparar y moverse | escrita, **sin ejecutar** |
 | Compilar el motor Godot | **no disponible en el entorno donde se escribió** |
 
@@ -36,7 +37,7 @@ Lo que sí está comprobado, y cómo:
   Resultado: **10/10 mapas y 96/96 modelos sin un solo problema de formato**.
 - Ese mismo script **renderiza** los mapas y los modelos a PNG (los de
   `docs/previews/`), así que la geometría no solo se parsea: se dibuja.
-- `tools/gdscript_check.py` valida los 18 scripts con el parser oficial de
+- `tools/gdscript_check.py` valida los 19 scripts con el parser oficial de
   GDScript (`gdtoolkit`) y contrasta cada llamada a la API contra el volcado de
   la API de Godot 4.4. También cruza las llamadas y señales **entre las clases
   del propio proyecto** (que `director.comprar()` exista, que la señal
@@ -69,8 +70,8 @@ Si no pasas `--map`, carga `de_dust2`.
 
 **Controles:** `WASD` mover, `Espacio` saltar, `Ctrl` agachar, `Clic izq.`
 disparar, `R` recargar, `1-5` armas, `Rueda` cambiar de arma, `B` menú de
-compra, `E` mantener para plantar/desactivar la C4, `F1` ayuda, `F5` reiniciar
-la partida, `Esc` liberar el ratón.
+compra, `E` mantener para plantar/desactivar la C4, puertas que se abren al
+acercarse, `F1` ayuda, `F5` reiniciar la partida, `Esc` liberar el ratón.
 
 ## 3. Qué hace exactamente
 
@@ -82,6 +83,10 @@ la partida, `Esc` liberar el ratón.
   aplica por `UV2` con `shaders/brush.gdshader`. La iluminación es la horneada
   por Valve en 1999, no luces dinámicas.
 - **Colisión**: `ConcavePolygonShape3D` con los mismos triángulos.
+- **Puertas móviles**: las caras de `func_door` y `func_door_rotating` se excluyen
+  del mundo estático y se reconstruyen como cuerpos móviles con su malla, textura,
+  lightmap y colisión. Se abren al acercarse un jugador o bot; se desplazan o giran
+  y vuelven a cerrarse según `wait`.
 - **Entidades**: spawns, sitios de bomba y rehenes leídos del lump de entidades.
 
 ### Modelos y animación
@@ -110,7 +115,8 @@ Al arrancar aparecen **4 bots** con los modelos de las facciones originales
 está escrita: patrullan el grafo del mapa, ven con FOV y línea de visión,
 disparan, recargan y usan las transiciones de escaleras de mano disponibles.
 El código no se ha podido ejecutar en Godot aquí; `docs/PENDIENTE.md` detalla
-qué se ha validado por simulación y qué falta.
+qué se ha validado por simulación y qué falta. Las puertas también se abren por
+proximidad, sin pulsar `E`.
 
 ```bash
 godot --path . -- --actores 12 --secuencia run   # 12 soldados corriendo
@@ -267,6 +273,7 @@ python3 tools/cs15_validate.py    # 96 modelos + 10 mapas + PNGs
 python3 tools/partida_validate.py # modo de juego: constantes, precios, economia
 python3 tools/nav_validate.py     # grafo de navegacion de los 10 mapas + PNGs
 python3 tools/bots_validate.py    # punteria y daño por segundo de los bots
+python3 tools/doors_validate.py   # rangos, modelos y recorridos de las 27 puertas
 python3 tools/gdscript_check.py   # sintaxis, API de 4.4, cruces entre scripts
 ```
 
@@ -296,7 +303,10 @@ de_train        4454    14041       11    89.6%    0.0%  5/5
 escaleras conectadas: 20/34 triggers
 problemas: 0
 
-18 scripts revisados, 0 problemas
+puertas con brush separado: 27 entidades, 425 caras
+problemas: 0
+
+19 scripts revisados, 0 problemas
 ```
 
 `partida_validate.py` lee las constantes de `economy.gd`, `match_director.gd` y

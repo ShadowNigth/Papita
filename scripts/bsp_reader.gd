@@ -79,6 +79,8 @@ var errores: Array[String] = []
 ## entidades (zonas de bomba, buyzones, puertas...).
 var modelos: Array[AABB] = []
 var modelos_goldsrc: Array[AABB] = []
+var modelos_primera_cara: PackedInt32Array = PackedInt32Array()
+var modelos_num_caras: PackedInt32Array = PackedInt32Array()
 
 
 static func cargar(ruta_bsp: String, paleta: CsPalette) -> BspReader:
@@ -193,6 +195,8 @@ func _leer_modelos() -> void:
 		var mx := Vector3(datos.decode_float(base + 12), datos.decode_float(base + 16),
 			datos.decode_float(base + 20))
 		modelos_goldsrc.append(AABB(mn, mx - mn))
+		modelos_primera_cara.append(datos.decode_s32(base + 56))
+		modelos_num_caras.append(datos.decode_s32(base + 60))
 		# Al invertir el eje Y de GoldSrc, las esquinas cambian de orden; un AABB
 		# de Godot necesita posición mínima y tamaño no negativo.
 		var ga := _a_godot(mn)

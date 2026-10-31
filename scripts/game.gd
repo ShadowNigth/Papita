@@ -114,8 +114,9 @@ func cargar_mapa(id: String) -> void:
 	var t0 := Time.get_ticks_msec()
 	info_mapa = MapBuilder.construir(bsp)
 	var t1 := Time.get_ticks_msec()
-	print("[papita] mapa construido en %d ms: %d superficies, %d triangulos" % [
-		t1 - t0, int(info_mapa.get("superficies", 0)), int(info_mapa.get("triangulos", 0))])
+	print("[papita] mapa construido en %d ms: %d superficies, %d triangulos, %d puertas" % [
+		t1 - t0, int(info_mapa.get("superficies", 0)), int(info_mapa.get("triangulos", 0)),
+		int(info_mapa.get("puertas", 0))])
 
 	_nodo_mapa = info_mapa["nodo"] as Node3D
 	add_child(_nodo_mapa)
