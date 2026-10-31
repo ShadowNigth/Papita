@@ -196,8 +196,12 @@ func _colocar_actores() -> void:
 		else:
 			actor.reproducir("idle1")
 		_actores.append(actor)
-	print("[papita] %d actores animados (%s)" % [
-		_actores.size(), ", ".join(a.secuencias_disponibles().slice(0, 6))])
+	var muestra_secuencias := "ninguna"
+	if not _actores.is_empty():
+		var disponibles: PackedStringArray = _actores[0].secuencias_disponibles()
+		var muestra: PackedStringArray = disponibles.slice(0, mini(6, disponibles.size()))
+		muestra_secuencias = ", ".join(muestra)
+	print("[papita] %d actores animados (%s)" % [_actores.size(), muestra_secuencias])
 
 
 ## Crea la IA de cada actor. Los bots son del bando contrario al jugador.
@@ -297,14 +301,27 @@ func _on_dinero(cantidad: int) -> void:
 		hud.dinero = cantidad
 
 
+## Devuelve un nodo caminable aleatorio convertido de GoldSrc a Godot; si el
+## grafo no está disponible, usa uno de los spawns del BSP.
+func _punto_aleatorio() -> Vector3:
+	if nav != null and nav.valido() and not nav.posiciones.is_empty():
+		var indice := randi() % nav.posiciones.size()
+		return BspReader._a_godot(nav.posiciones[indice])
+	var spawns: Array[Vector3] = []
+	spawns.assign(info_mapa.get("spawns", []))
+	if not spawns.is_empty():
+		return spawns[randi() % spawns.size()]
+	return Vector3.ZERO
+
+
 ## Un punto de aparición lejos de `de`. Nacer al lado del jugador y que te
 ## maten antes de ver nada no es un juego, es una emboscada.
 func _spawn_lejos(de: Vector3, minimo: float = 10.0) -> Vector3:
-	var mejor := _punto_aleatorio()
-	var mejor_d := -1.0
+	var mejor: Vector3 = _punto_aleatorio()
+	var mejor_d: float = -1.0
 	for i in 12:
-		var punto := _punto_aleatorio()
-		var d := punto.distance_to(de)
+		var punto: Vector3 = _punto_aleatorio()
+		var d: float = punto.distance_to(de)
 		if d >= minimo:
 			return punto
 		if d > mejor_d:

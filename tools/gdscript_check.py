@@ -34,9 +34,10 @@ RE_CLASE_CONST = re.compile(r"\b([A-Z][A-Za-z0-9_]*)\.([A-Z][A-Z0-9_]{2,})\b")
 RE_PRELOAD = re.compile(r'preload\(\s*"(res://[^"]+)"\s*\)')
 RE_EXTENDS = re.compile(r"^extends\s+([A-Za-z0-9_]+)", re.MULTILINE)
 RE_CLASS_NAME = re.compile(r"^class_name\s+(\w+)", re.MULTILINE)
-RE_FUNC = re.compile(r"^func\s+(\w+)\s*\(", re.MULTILINE)
+RE_FUNC = re.compile(r"^\s*(?:static\s+)?func\s+(\w+)\s*\(", re.MULTILINE)
 RE_SIGNAL = re.compile(r"^signal\s+(\w+)", re.MULTILINE)
 RE_VAR_TIPADA = re.compile(r"^var\s+(\w+)\s*:\s*(\w+)", re.MULTILINE)
+RE_LLAMADA_PRIVADA = re.compile(r"(?<![\w.])(_[A-Za-z]\w*)\s*\(")
 
 
 # Metodos heredados de Object/Node/Node3D/RefCounted que nunca se declaran
@@ -80,6 +81,25 @@ def senales_por_clase(ficheros: list[Path]) -> dict[str, set[str]]:
         m = RE_CLASS_NAME.search(texto)
         salida[m.group(1) if m else f.stem.capitalize()] = set(RE_SIGNAL.findall(texto))
     return salida
+
+
+def comprobar_llamadas_privadas(ficheros: list[Path]) -> int:
+    """Cada llamada a un helper `_privado()` sin receptor debe existir en el script.
+
+    Evita errores de compilación semántica que el parser de gdtoolkit no detecta,
+    como llamar a `_punto_aleatorio()` cuando nunca se declaró.
+    """
+    problemas = 0
+    for f in ficheros:
+        texto = f.read_text(encoding="utf-8")
+        declaradas = set(RE_FUNC.findall(texto))
+        for i, linea in enumerate(texto.splitlines(), 1):
+            codigo = linea.split("#", 1)[0]
+            for m in RE_LLAMADA_PRIVADA.finditer(codigo):
+                if m.group(1) not in declaradas:
+                    print(f"{f.relative_to(ROOT)}:{i}: HELPER -> {m.group(1)}() no declarado")
+                    problemas += 1
+    return problemas
 
 
 def comprobar_manejadores(ficheros: list[Path]) -> int:
@@ -277,8 +297,9 @@ def main() -> int:
     # 6) senales declaradas antes de conectarse
     problemas += comprobar_senales(ficheros, senales_por_clase(ficheros))
 
-    # 7) manejadores de senal y arrays tipados desde Dictionary
+    # 7) manejadores, helpers internos y arrays tipados desde Dictionary
     problemas += comprobar_manejadores(ficheros)
+    problemas += comprobar_llamadas_privadas(ficheros)
     problemas += comprobar_arrays_tipados(ficheros)
 
     print(f"\n{len(ficheros)} scripts revisados, {problemas} problemas")
