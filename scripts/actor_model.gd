@@ -11,6 +11,7 @@ extends Node3D
 ## GPU una sola vez y animar cuesta 53 transformaciones, no 800 vértices.
 
 const RAIZ_MODELOS := "res://assets/models/cs15/"
+const ESCALA_GOLDSRC := 0.025
 
 var lector: MdlReader
 var esqueleto: Skeleton3D
@@ -45,6 +46,11 @@ func cargar(fichero: String, paleta: CsPalette) -> bool:
 
 	esqueleto = lector.construir_esqueleto()
 	esqueleto.name = "esqueleto"
+	# Los modelos StudioModel conservan ejes y unidades GoldSrc: Z arriba y
+	# 1 unidad = 0,025 m. La colisión del actor ya está en metros y queda fuera
+	# de este nodo visual.
+	esqueleto.rotation_degrees.x = -90.0
+	esqueleto.scale = Vector3.ONE * ESCALA_GOLDSRC
 	add_child(esqueleto)
 
 	instancia = MeshInstance3D.new()

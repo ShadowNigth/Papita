@@ -45,4 +45,8 @@ if ! grep -Fq '[papita] 8 actores animados' "$LOG_DIR/arranque.log"; then
     exit 1
 fi
 
+# Verifica con el motor los límites tras convertir Z-up/unidades GoldSrc a Godot:
+# los ocho modelos deben medir entre 1,5 y 1,95 m de alto, no decenas de metros.
+run_godot escala_modelos --script res://tools/godot_actor_validate.gd
+
 echo "Prueba headless de Godot completada sin errores."

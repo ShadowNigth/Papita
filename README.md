@@ -80,7 +80,7 @@ acercarse, `F1` ayuda, `F5` reiniciar la partida, `Esc` liberar el ratón.
 ### Mapas
 - Lee los **15 lumps** del `.bsp`, reconstruye las caras como abanicos
   triangulados y las agrupa por textura (una superficie por material).
-- **Texturas**: miptex indexadas a 8 bits + `palette.lmp` → `Image` RGB.
+- **Texturas del mapa**: miptex indexadas a 8 bits + `palette.lmp` → `Image` RGB. Cada textura de modelo `.mdl` trae su propia paleta RGB embebida.
 - **Lightmaps**: empaqueta el lightmap de cada cara en un atlas único y lo
   aplica por `UV2` con `shaders/brush.gdshader`. La iluminación es la horneada
   por Valve en 1999, no luces dinámicas.
@@ -215,7 +215,7 @@ scenes/main.tscn        escena unica (Node3D + scripts/game.gd)
 icon.svg                icono propio (nada de material de Valve)
 
 scripts/
-  palette.gd            .lmp -> Color; si no hay paleta, una aproximada
+  palette.gd            palette.lmp para BSP; fallback aproximado (los MDL la embeben)
   bsp_reader.gd         lector .bsp v30 (lumps, caras, texinfo, luz, entidades)
   mdl_reader.gd         lector .mdl v10 (mallas, huesos, bind pose, texturas)
   map_builder.gd        .bsp -> malla + colision + atlas de luz + ambiente
@@ -247,8 +247,9 @@ legacy/godot/           primer intento (geometria procedural, sin assets)
 Las texturas de los `.bsp` son **índices de 8 bits**; el color estaba en
 `gfx/palette.lmp` del Half-Life base, que no está en el repositorio (ni en su
 historial). Sin él, el proyecto usa una paleta aproximada (cubo 6×6×6 + grises)
-y avisa por consola. El efecto es visible: la geometría y los rótulos se leen
-perfectamente, pero los colores salen ruidosos.
+y avisa por consola. El efecto se ve en las texturas del mapa: la geometría y
+los rótulos se leen, pero los colores salen ruidosos. Los modelos `.mdl` llevan
+su propia paleta RGB embebida y no dependen de ese fichero.
 
 ![texturas de de_dust2 con paleta aproximada](docs/previews/de_dust2_texturas.png)
 
@@ -324,8 +325,9 @@ prueba el motor: prueba los números y la aritmética.
 - descarga Godot **4.7.2 oficial**, comprueba el SHA-256 publicado por Godot y
   conserva el binario en la caché de GitHub Actions entre ejecuciones;
 - importa/analiza el proyecto y arranca `scenes/main.tscn` con ocho bots. Eso
-  carga los ocho modelos animados y pasa por el lector real `.mdl`, incluido
-  el mapeo de UV que generó el último fallo;
+  carga los ocho modelos animados, comprueba que su altura quede en el rango
+  humano (1,5–1,95 m) y pasa por el lector real `.mdl`, incluidas las paletas
+  RGB embebidas y el mapeo de UV que generó el último fallo;
 - ejecuta después los validadores de mapas, modelos, navegación, puertas, bots
   y lógica de partida.
 

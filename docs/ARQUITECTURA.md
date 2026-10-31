@@ -10,7 +10,8 @@ normal de Godot construido encima.
 assets/maps/cs15/*.bsp ──► bsp_reader.gd ──► map_builder.gd ──► malla + colisión + luz
 assets/models/cs15/*.mdl ─► mdl_reader.gd ──► ArrayMesh (bind pose)
 assets/sounds/cs15/*.wav ─► audio.gd ───────► AudioStreamWAV
-assets/valve/gfx/palette.lmp ─► palette.gd ─► Color[] para los índices de 8 bits
+palette.lmp ──────────────► palette.gd ──────► paleta para texturas .bsp
+texturas .mdl (paleta embebida) ─────────────► mdl_reader.gd ─► Image RGB
 ```
 
 ## Por qué no se usan importadores
@@ -26,7 +27,7 @@ arrancar. Nada que reimportar.
 ## Flujo de arranque
 
 1. `game.gd::_ready()` lee `--map` de la línea de comandos.
-2. Carga la paleta (`palette.gd`): `palette.lmp` si existe, si no una generada.
+2. Carga `palette.lmp` (o la aproximación) para texturas de `.bsp`; las texturas `.mdl` usan su tabla RGB embebida.
 3. `BspReader.cargar()` parsea el `.bsp` completo.
 4. `MapBuilder.construir()`:
    - Empaqueta los lightmaps en un atlas y guarda el hueco de cada cara.
@@ -56,9 +57,10 @@ una superficie por cara serían 5000 draw calls. Agrupando por textura baja a
 en vez de una textura por cara se empaqueta todo en una imagen y se guarda el
 rectángulo de cada cara para calcular la `UV2`.
 
-**Escala 0.025.** GoldSrc usa ~0.025 m por unidad. Se aplica al leer los
-vértices, no al escalar el nodo, para que la física de Godot trabaje en metros
-(las cápsulas, la gravedad y los rayos de arma esperan eso).
+**Escala 0.025.** GoldSrc usa ~0.025 m por unidad. Los vértices BSP se convierten
+al leerlos; el modelo MDL conserva sus unidades dentro del lector y su nodo
+visual se convierte de Z-up a Y-up y se escala por 0.025. La cápsula de impacto
+queda fuera de ese nodo y ya se expresa en metros.
 
 **Constantes del movimiento copiadas del motor.** No están ajustadas "hasta que
 se siente bien": son `sv_accelerate`, `sv_friction`, `sv_airaccelerate`,

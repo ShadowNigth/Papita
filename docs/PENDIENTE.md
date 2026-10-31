@@ -129,9 +129,10 @@ Lo que falta o está a medias:
 
 ## 6. La paleta
 
-Los colores no son los de 1999 porque falta `palette.lmp` (ver README §5).
-No es un bug: es un asset que no se puede redistribuir. Con tu copia legal de
-Half-Life se resuelve copiando el fichero.
+Los colores de las texturas del mapa no son los de 1999 porque falta
+`palette.lmp` (ver README §5). No es un bug de lectura: es un asset que no se
+redistribuye. Con una copia propia de Half-Life se resuelve copiando el fichero.
+Las texturas de los modelos `.mdl` sí usan su paleta RGB embebida.
 
 ## 7. Detalles del original que faltan
 

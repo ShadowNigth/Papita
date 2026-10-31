@@ -199,10 +199,10 @@ La UV es `s / ancho_textura`, `t / alto_textura`, con la textura `skinref`.
 76  int32    index    // offset ABSOLUTO de los píxeles (8 bits por píxel)
 ```
 
-Al contrario que en el `.bsp`, aquí **sí** se indexan con la paleta, pero la
-mayoría de los modelos de CS 1.5 son en realidad BMP de 8 bits con su propia
-tabla de color... salvo que el motor los convierta con `palette.lmp`. En este
-proyecto se usa la misma paleta que para los mapas.
+Cada imagen tiene `width * height` bytes indexados y, justo después, **768
+bytes de paleta RGB propia** (256 colores × 3 canales). Se comprobó en las 288
+texturas de los 96 modelos del repositorio. Por eso el `.mdl` no necesita
+`palette.lmp`; esa paleta externa solo hace falta para las texturas `.bsp`.
 
 ## 3. Animación
 
@@ -224,7 +224,10 @@ animindex @ 124    (int32)   <- absoluto; no en 128
 
 - **GoldSrc**: 1 unidad ≈ 0.025 m. `+X` este, `+Y` norte, `+Z` arriba.
 - **Godot**: `+X` este, `+Y` arriba, `+Z` hacia el sur.
-- Conversión usada: `(x, z, -y) * 0.025`.
+- En `.bsp`: cada vértice pasa a `(x, z, -y) * 0.025` al leerse.
+- En los actores `.mdl`: el esqueleto visual conserva el espacio local del
+  formato; su nodo se rota `-90°` en X (Z-up → Y-up) y se escala por `0.025`.
+  La caja de impacto está fuera de ese nodo y ya usa metros.
 
 ## 5. Cómo verificarlo tú
 

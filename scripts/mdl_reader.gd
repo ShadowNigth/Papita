@@ -110,7 +110,9 @@ func _calcular_bind_pose() -> void:
 		var h: Dictionary = huesos[i]
 		var pos: Vector3 = h["pos"]
 		var rot: Vector3 = h["rot"]
-		var t := Transform3D(Basis.from_euler(rot), pos)
+		# Usar el mismo orden de ángulos GoldSrc que en las poses animadas y
+		# en bind_pose_local; Basis.from_euler usa el orden Euler de Godot.
+		var t := Transform3D(Basis(_cuaternion(rot)), pos)
 		var padre: int = h["padre"]
 		if padre >= 0 and padre < bind_pose.size():
 			t = bind_pose[padre] * t
@@ -149,9 +151,19 @@ func _leer_texturas(n: int, base0: int) -> void:
 			"imagen": null,
 		}
 		if idx > 0 and idx < datos.size() and ancho > 0 and alto > 0 and ancho * alto < 4194304:
-			if idx + ancho * alto <= datos.size():
-				var indices := datos.slice(idx, idx + ancho * alto)
-				tex["imagen"] = paleta.indices_a_imagen(indices, ancho, alto)
+			var fin_pixeles: int = idx + ancho * alto
+			if fin_pixeles <= datos.size():
+				var indices := datos.slice(idx, fin_pixeles)
+				var paleta_textura := PackedColorArray()
+				# A diferencia de los miptex de BSP, cada textura StudioModel
+				# lleva su tabla RGB de 256 colores inmediatamente después de
+				# los píxeles indexados (768 bytes por textura).
+				if fin_pixeles + 256 * 3 <= datos.size():
+					paleta_textura.resize(256)
+					for color_idx in 256:
+						var color_ofs: int = fin_pixeles + color_idx * 3
+						paleta_textura[color_idx] = Color8(datos[color_ofs], datos[color_ofs + 1], datos[color_ofs + 2])
+				tex["imagen"] = paleta.indices_a_imagen(indices, ancho, alto, paleta_textura)
 		texturas.append(tex)
 
 

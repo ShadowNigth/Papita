@@ -1,10 +1,10 @@
 class_name CsPalette
 extends RefCounted
-## Paleta de 256 colores (.lmp) para las texturas indexadas de los .bsp y .mdl.
+## Paleta global de 256 colores (.lmp) para las texturas indexadas de los .bsp.
 ##
-## Los assets no traen paleta: los .bsp guardan los pixeles como indices y la
-## paleta vivia en gfx/palette.lmp del Half-Life base. Si no esta, se genera una
-## aproximacion (cubo 6x6x6 + rampa de grises) y se avisa por consola.
+## Los mapas guardan píxeles como índices y el color vivía en gfx/palette.lmp
+## del Half-Life base. Si no está, se genera una aproximación (cubo 6x6x6 +
+## rampa de grises) y se avisa por consola. Las texturas .mdl incluyen su tabla.
 
 const RUTAS_PALETA: Array[String] = [
 	"res://assets/valve/gfx/palette.lmp",
@@ -57,12 +57,16 @@ func _generar() -> void:
 
 
 ## Convierte un buffer de indices en una Image RGB8.
-func indices_a_imagen(indices: PackedByteArray, ancho: int, alto: int) -> Image:
+func indices_a_imagen(indices: PackedByteArray, ancho: int, alto: int,
+		paleta_local: PackedColorArray = PackedColorArray()) -> Image:
+	var tabla: PackedColorArray = colores
+	if paleta_local.size() >= 256:
+		tabla = paleta_local
 	var total := mini(indices.size(), ancho * alto)
 	var pixeles := PackedByteArray()
 	pixeles.resize(total * 3)
 	for i in total:
-		var c := colores[indices[i]]
+		var c := tabla[indices[i]]
 		pixeles[i * 3] = int(c.r * 255.0)
 		pixeles[i * 3 + 1] = int(c.g * 255.0)
 		pixeles[i * 3 + 2] = int(c.b * 255.0)

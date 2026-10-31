@@ -393,11 +393,19 @@ class Mdl:
             nombre = self.raw[base:base + 64].split(b"\0")[0].decode("latin1")
             flags, w, h, idx = struct.unpack_from("<iiii", self.raw, base + 64)
             rgb = None
+            paleta_incrustada = False
             if 0 < idx < len(self.raw) and w > 0 and h > 0 and w * h < 4_000_000:
-                datos = self.raw[idx:idx + w * h]
+                fin_pixeles = idx + w * h
+                datos = self.raw[idx:fin_pixeles]
                 if len(datos) == w * h:
-                    rgb = self.paleta[np.frombuffer(datos, dtype=np.uint8)].reshape(h, w, 3)
-            self.texturas.append({"nombre": nombre, "ancho": w, "alto": h, "rgb": rgb})
+                    tabla = self.paleta
+                    if fin_pixeles + 256 * 3 <= len(self.raw):
+                        tabla = np.frombuffer(self.raw[fin_pixeles:fin_pixeles + 256 * 3],
+                                              dtype=np.uint8).reshape(256, 3)
+                        paleta_incrustada = True
+                    rgb = tabla[np.frombuffer(datos, dtype=np.uint8)].reshape(h, w, 3)
+            self.texturas.append({"nombre": nombre, "ancho": w, "alto": h,
+                                  "rgb": rgb, "paleta_incrustada": paleta_incrustada})
 
     def _leer_cuerpos(self) -> None:
         """bodypart -> model -> mesh, con los offsets reales de los structs.
@@ -721,6 +729,9 @@ class Mdl:
         sin_textura = sum(1 for t in self.texturas if t["rgb"] is None)
         if sin_textura:
             problemas.append(f"{sin_textura} texturas sin datos")
+        sin_paleta = sum(1 for t in self.texturas if not t["paleta_incrustada"])
+        if sin_paleta:
+            problemas.append(f"{sin_paleta} texturas sin paleta RGB embebida")
         if not self.mallas:
             problemas.append("sin mallas legibles")
         total_tris = sum(len(m["triangulos"]) for m in self.mallas)
