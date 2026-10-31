@@ -216,7 +216,6 @@ func _anadir_superficie(malla: ArrayMesh, numtris: int, triindex: int,
 	var normal := Vector3.UP
 	var pos := triindex
 	var hechos := 0
-	var idx_prev := PackedInt32Array()
 	while hechos < numtris and pos + 2 <= datos.size():
 		var cnt := datos.decode_s16(pos)
 		pos += 2
@@ -243,7 +242,6 @@ func _anadir_superficie(malla: ArrayMesh, numtris: int, triindex: int,
 				else:
 					agregados += _emitir(st, vertices, uvs, idx[k - 1], idx[k - 2], idx[k], normal)
 				hechos += 1
-		idx_prev = idx
 
 	if agregados == 0:
 		return
@@ -378,7 +376,6 @@ func pose(secuencia: int, cuadro: float) -> Array[Transform3D]:
 	var tabla := int(desc["animindex"])
 
 	for i in huesos.size():
-		var h: Dictionary = huesos[i]
 		var panim := tabla + i * 12           # un mstudioanim_t (6 uint16) por hueso
 		if tabla <= 0 or panim + 12 > datos.size():
 			salida.append(bind_pose_local[i] if i < bind_pose_local.size() else Transform3D())
@@ -502,13 +499,13 @@ func _anadir_superficie_animada(malla: ArrayMesh, numtris: int, triindex: int,
 					tri.append_array(PackedInt32Array([idx[k - 1], idx[k - 2], idx[k]]))
 				hechos += 1
 		for t in range(0, tri.size(), 3):
-			var a := tri[t]
-			var bb := tri[t + 1]
-			var cc := tri[t + 2]
+			var a: int = tri[t]
+			var bb: int = tri[t + 1]
+			var cc: int = tri[t + 2]
 			if minf(minf(a, bb), cc) < 0 or maxf(maxf(a, bb), cc) >= numverts:
 				continue
-			for vi in [a, bb, cc]:
-				var o := vertindex + vi * 12
+			for vi: int in [a, bb, cc]:
+				var o: int = vertindex + vi * 12
 				var v := Vector3(datos.decode_float(o), datos.decode_float(o + 4), datos.decode_float(o + 8))
 				var hueso := 0
 				if vertinfo + vi < datos.size():
@@ -521,7 +518,6 @@ func _anadir_superficie_animada(malla: ArrayMesh, numtris: int, triindex: int,
 				st.set_uv(uvs[vi])
 				st.add_vertex(v)
 				agregados += 1
-
 	if agregados == 0:
 		return
 	st.generate_normals()
@@ -536,9 +532,9 @@ func _anadir_superficie_animada(malla: ArrayMesh, numtris: int, triindex: int,
 	malla.surface_set_material(malla.get_surface_count() - 1, material)
 
 
-func indice_secuencia(nombre: String) -> int:
+func indice_secuencia(nombre_buscado: String) -> int:
 	for i in secuencias.size():
-		if String(secuencias[i]["nombre"]) == nombre:
+		if String(secuencias[i]["nombre"]) == nombre_buscado:
 			return i
 	return -1
 
