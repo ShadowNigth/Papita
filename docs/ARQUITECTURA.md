@@ -2,82 +2,79 @@
 
 ## Idea
 
-El proyecto anterior (`legacy/godot/`) reimplementaba Counter-Strike en Godot:
-20 500 líneas de GDScript con loaders propios de `.mdl` y `.bsp`. Funcionaba,
-pero era una interpretación: geometría procedural, texturas generadas, balística
-aproximada.
-
-Esta versión cambia el enfoque: **no se reimplementa el motor, se usa uno**.
-Xash3D-FWGS es una reimplementación libre y compatible de GoldSrc; cargando los
-archivos originales dentro de él se obtiene el juego real, no una aproximación.
+Un solo motor, Godot 4.4, y **los assets originales de Counter-Strike 1.5**. El
+trabajo de verdad está en los dos lectores de formato: el resto es un juego
+normal de Godot construido encima.
 
 ```
-                    ┌──────────────────────────────┐
-   assets/  ───────►│  game/cstrike/  (gamedir)    │
-   (.mdl .bsp .wav) │  models/ sound/ maps/ *.cfg  │
-                    └───────────┬──────────────────┘
-                                │ lo lee
-                    ┌───────────▼──────────────────┐
-                    │  runtime/xash (Xash3D-FWGS)  │  motor: BSP, MDL, red, física
-                    └───────────┬──────────────────┘
-                    carga ┌─────┴──────┐
-                          ▼            ▼
-                 dlls/cs_amd64.so   cl_dll/client_amd64.so
-                 (ReGameDLL: reglas) (cs16-client: HUD, menús, predicción)
+assets/maps/cs15/*.bsp ──► bsp_reader.gd ──► map_builder.gd ──► malla + colisión + luz
+assets/models/cs15/*.mdl ─► mdl_reader.gd ──► ArrayMesh (bind pose)
+assets/sounds/cs15/*.wav ─► audio.gd ───────► AudioStreamWAV
+assets/valve/gfx/palette.lmp ─► palette.gd ─► Color[] para los índices de 8 bits
 ```
 
-## Quién hace qué
+## Por qué no se usan importadores
 
-**El motor** (`xash3d-fwgs`): parsea `.bsp` v30 (lumps, lightmaps, entidades,
-PVS), `.mdl` v10 (huesos, secuencias, texturas, eventos), sirve los `.wav`,
-gestiona red, física de jugadores, predicción y el sistema de ficheros virtual.
+Godot no sabe leer `.bsp` ni `.mdl`, y no hay importadores mantenidos para
+Godot 4. Escribirlos es la parte interesante del proyecto y, además, la única
+forma de que los assets no se conviertan en una copia muerta: aquí se leen tal
+cual, en tiempo de ejecución, sin pasos previos ni ficheros intermedios.
 
-**El game dll** (`ReGameDLL_CS`, `cs_amd64.so`): las reglas. Economía, compra,
-rondas, C4, rehenes, daño, bot integrado. Es el equivalente a `mp.dll`.
+Ventaja práctica: si cambias un `.bsp` o un `.mdl`, el juego lo refleja al
+arrancar. Nada que reimportar.
 
-**El client dll** (`cs16-client`): lo que ve el jugador. HUD, menús, selección de
-equipo, viewmodel con animaciones, `cl_*`.
+## Flujo de arranque
 
-**`liblist.gam`** es el contrato entre los tres: nombre del juego, versión y ruta
-del game dll.
-
-## Por qué 64 bits y `XASH_COMPAT`
-
-Xash3D-FWGS compila a 64 bits con `./waf configure -8`. Para que ReGameDLL
-produzca un `.so` compatible hay que configurarlo con `-DXASH_COMPAT=ON`:
-cambia el ABI a 64 bits y añade el sufijo `_amd64` al nombre de la librería
-(sale `cs_amd64.so`). El motor, por su parte, añade ese sufijo a lo que lea en
-`liblist.gam`; de ahí la combinación `gamedll "dlls/cs.so"` + fichero
-`cs_amd64.so` que parece un error y no lo es.
-
-## Los scripts
-
-| Script | Entrada | Salida |
-|---|---|---|
-| `fetch_sources.sh` | `engine/pins.lock` | `.src/` con 3 repos + submódulos |
-| `gen_build_h.py` | arquitectura del host | `.src/xash3d-fwgs/public/build.h` |
-| `build_engine.sh` | `.src/xash3d-fwgs` | `runtime/xash`, `filesystem_stdio.so` |
-| `build_gamedll.sh` | `.src/ReGameDLL_CS` | `cs_amd64.so` |
-| `build_client.sh` | `.src/cs16-client` | `client_*.so`, `menu_*.so` |
-| `assemble_gamedir.py` | `assets/`, `config/` | `game/cstrike/` |
-| `make_free_base.py` | nada | `game/valve/` libre (paleta + fuente) |
-| `bootstrap_valve.py` | tu Half-Life | `game/valve/` enlazado |
-| `cs15_audit.py` | `assets/` | validación + JSON |
-| `smoke_test.sh` | `runtime/`, `game/` | 10 mapas arrancados o error |
-
-Nada de esto se versiona: `.src/`, `.build/`, `runtime/` y `game/` están en
-`.gitignore`. El repositorio solo guarda código, configuración, documentación y
-los assets originales.
+1. `game.gd::_ready()` lee `--map` de la línea de comandos.
+2. Carga la paleta (`palette.gd`): `palette.lmp` si existe, si no una generada.
+3. `BspReader.cargar()` parsea el `.bsp` completo.
+4. `MapBuilder.construir()`:
+   - Empaqueta los lightmaps en un atlas y guarda el hueco de cada cara.
+   - Triangula las caras en abanicos, agrupadas por textura.
+   - Crea una superficie por material con UV (`UV`) y UV de luz (`UV2`).
+   - Genera la colisión concava.
+   - Añade `WorldEnvironment` y una `DirectionalLight3D` (esta última solo
+     afecta a los modelos: la geometría es `unshaded` y usa el lightmap).
+5. Coloca al jugador en un spawn leído del lump de entidades.
+6. Crea el HUD y captura el ratón.
 
 ## Decisiones
 
-- **Revisiones fijas, no ramas.** `pins.lock` evita que una actualización del
-  motor rompa el build sin avisar.
-- **Assets fuera del gamedir.** Se guardan en `assets/` con nombres neutros y el
-  ensamblador los reubica; así se pueden reorganizar sin tocar los binarios.
-- **Enlaces duros, no copias.** `assemble_gamedir.py` enlaza para no duplicar
-  60 MB en disco (`--copy` si tu sistema de ficheros no lo permite).
-- **El gamedir es desechable.** Siempre se puede borrar y regenerar; nada único
-  vive en `game/`.
-- **`legacy/godot/` se conserva.** Es el intento anterior, íntegro, por si sirve
-  de referencia o de comparación.
+**Geometría `unshaded` + lightmap.** El original no tenía luces dinámicas: toda
+la iluminación está horneada en el `.bsp`. Replicarlo da el aspecto correcto y
+cuesta cero en rendimiento. El shader hace `pow(color, 2.2)` para pasar de sRGB
+a lineal antes de multiplicar por la luz, y el lightmap se multiplica por 2.2
+porque los valores de 1999 vienen ya "brillantes".
+
+**Una superficie por textura.** Un mapa tiene ~5000 caras y ~150 texturas; con
+una superficie por cara serían 5000 draw calls. Agrupando por textura baja a
+~150.
+
+**Atlas de luz único.** Cada cara tiene su propio lightmap con su propio tamaño;
+en vez de una textura por cara se empaqueta todo en una imagen y se guarda el
+rectángulo de cada cara para calcular la `UV2`.
+
+**Escala 0.025.** GoldSrc usa ~0.025 m por unidad. Se aplica al leer los
+vértices, no al escalar el nodo, para que la física de Godot trabaje en metros
+(las cápsulas, la gravedad y los rayos de arma esperan eso).
+
+**Constantes del movimiento copiadas del motor.** No están ajustadas "hasta que
+se siente bien": son `sv_accelerate`, `sv_friction`, `sv_airaccelerate`,
+`sv_stopspeed` y las velocidades de CS 1.5, convertidas a metros. Es lo que hace
+que moverse se parezca al original.
+
+## Los tres niveles de verificación
+
+Este proyecto no se pudo ejecutar en el entorno donde se escribió, así que se
+verificó en tres capas:
+
+1. **Formato**: `tools/cs15_validate.py` reimplementa los mismos offsets en
+   Python y los ejecuta contra los 10 mapas y 96 modelos. Si los números cuadran
+   y la geometría se dibuja, los lectores de GDScript están bien.
+2. **Sintaxis**: `tools/gdscript_check.py` parsea cada `.gd` con `gdtoolkit`.
+3. **API**: el mismo script contrasta cada `Clase.metodo()` y cada constante
+   contra `docs/godot44_api.json.gz`, un volcado de la API de Godot 4.4. Esto es
+   lo que detectó que `SurfaceTool.get_vertex_count()` no existe.
+
+Lo que ninguna de las tres capas puede comprobar es el comportamiento en
+ejecución. Eso queda para la primera vez que abras el editor.

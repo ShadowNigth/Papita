@@ -1,3 +1,8 @@
+# --- Godot ---
+.godot/
+*.import
+export_presets.cfg
+
 # --- generado por los scripts (no se versiona) ---
 .src/
 .build/
