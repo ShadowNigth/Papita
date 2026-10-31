@@ -10,9 +10,10 @@ parseo y ejecución durante la carga; se corrigieron los hallazgos informados,
 pero aún falta confirmar una partida completa y el comportamiento de juego.
 Este entorno del agente no trae Godot y la descarga de Releases redirige a un
 host fuera de su lista de descargas permitidas. Se agregó
-`.github/workflows/godot-ci.yml`: en cada push/PR ejecutará el arranque headless
-y los validadores estáticos. El primer resultado de ese workflow todavía está
-pendiente; no se presenta como prueba pasada.
+`.github/workflows/godot-ci.yml`: cada push/PR ejecuta el arranque headless y
+los validadores estáticos. La primera corrida en GitHub Actions
+([41164562715](https://github.com/ShadowNigth/Papita/actions/runs/41164562715))
+pasó en 50 s; queda pendiente la prueba interactiva de una partida completa.
 
 Aspectos que aún requieren una prueba funcional completa:
 

@@ -26,13 +26,13 @@ jobs:
 
     steps:
       - name: Obtener el repositorio
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Preparar caché del motor
         run: mkdir -p "$HOME/.cache/godot/$GODOT_VERSION"
 
       - name: Restaurar caché de Godot
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/godot/${{ env.GODOT_VERSION }}
           key: godot-${{ runner.os }}-${{ env.GODOT_VERSION }}-linux-x86_64
@@ -56,7 +56,7 @@ jobs:
           "$godot_dir/godot" --version
 
       - name: Preparar Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip

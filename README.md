@@ -28,7 +28,7 @@ spawns y el círculo naranja el sitio de bomba A/B.*
 | Grafo de navegación sacado del `.bsp` | **validado** en los 10 mapas; 20 subidas por escalera verificadas (Python) |
 | Puertas `func_door` / `func_door_rotating` | implementadas; 27 brush models validados estáticamente, falta probar su comportamiento en una partida |
 | IA de los bots: ver, apuntar, disparar y moverse | escrita; falta validar una partida completa en Godot |
-| Arranque real en Godot 4.7.2 | prueba headless automatizada configurada en GitHub Actions; primer resultado pendiente |
+| Arranque real en Godot 4.7.2 | prueba headless automatizada en GitHub Actions; primera ejecución pasó |
 
 Lo que sí está comprobado, y cómo:
 
@@ -44,13 +44,13 @@ Lo que sí está comprobado, y cómo:
   conectada esté declarada, que un `Array[T]` no se rellene con un `Array` sin
   tipo): **0 problemas**.
 
-El usuario ya ejecutó el proyecto en Godot 4.7.2 y reportó errores de carga que
-se fueron corrigiendo; eso todavía no equivale a validar una partida completa.
-El entorno de este agente no puede descargar el binario de Releases: GitHub
-redirige el archivo a un host fuera de su lista de descargas permitidas. Para
-poder repetir la prueba, `.github/workflows/godot-ci.yml` prepara un runner
-headless con la versión oficial 4.7.2. Su primer resultado aún está pendiente;
-no se afirma que el workflow ya haya pasado.
+El usuario ejecutó el proyecto en Godot 4.7.2 y reportó errores de carga que
+se fueron corrigiendo. La primera ejecución automática del workflow en GitHub
+Actions terminó correctamente (run `41164562715`); esto verifica el arranque
+headless y los validadores, pero no equivale a una partida interactiva completa.
+El entorno de este agente no puede descargar el binario directamente: GitHub
+redirige el archivo a un host fuera de su lista de descargas permitidas. El
+workflow resuelve esa limitación usando un runner de GitHub.
 
 ## 2. Arrancar
 
@@ -203,10 +203,9 @@ bono de derrota de 1400/1900/2400/2900 $ según las rondas perdidas seguidas.
 Si sobrevives la ronda **conservas armas, chaleco y granadas**; si mueres
 vuelves con cuchillo y pistola (USP si eres CT, Glock si eres T).
 
-> Todavía falta validar una partida completa y la interacción de estas
-> mecánicas. El usuario ya inició el proyecto en Godot 4.7.2 y reportó errores
-> de carga; la prueba automática de arranque está en `.github/workflows/godot-ci.yml`.
-> Las comprobaciones Python no sustituyen una prueba dentro del motor.
+> La primera prueba automática en Godot 4.7.2 ya pasó el arranque headless y la
+> carga de ocho modelos, pero todavía falta validar una partida interactiva y
+> estas mecánicas en juego.
 
 ## 4. Estructura
 
@@ -341,9 +340,10 @@ máquina que ya tenga Godot instalado:
 GODOT_BIN=/ruta/a/Godot_v4.7.2-stable_linux.x86_64 tools/godot_smoke_test.sh
 ```
 
-El workflow quedó configurado, pero falta su primer resultado real de GitHub
-Actions; hasta entonces no se declara verde ni se afirma que Godot haya pasado
-la prueba automática.
+La primera ejecución real del workflow terminó correctamente en 50 s:
+[run 41164562715](https://github.com/ShadowNigth/Papita/actions/runs/41164562715).
+Pasó el arranque headless y todos los validadores; no sustituye una prueba de
+juego interactiva.
 
 Las 46 secuencias que no se mueven son las **poses de apuntado** (`ref_aim_*`,
 `crouch_aim_*`): tienen 1-2 cuadros idénticos porque el juego las mezcla con
