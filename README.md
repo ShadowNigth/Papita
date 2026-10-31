@@ -24,6 +24,7 @@ spawns y el círculo naranja el sitio de bomba A/B.*
 | Animación de esqueletos (RLE, interpolación, skinning GPU) | **validado**: 215 secuencias con movimiento real |
 | Construcción del mapa en Godot (malla + colisión + atlas de luz) | escrito, **sin ejecutar** |
 | Jugador, armas, audio, HUD | escrito, **sin ejecutar** |
+| Modo de juego: rondas, economía, compra, C4 | escrito, **sin ejecutar** |
 | Compilar el motor Godot | **no disponible en el entorno donde se escribió** |
 
 Lo que sí está comprobado, y cómo:
@@ -33,9 +34,12 @@ Lo que sí está comprobado, y cómo:
   Resultado: **10/10 mapas y 96/96 modelos sin un solo problema de formato**.
 - Ese mismo script **renderiza** los mapas y los modelos a PNG (los de
   `docs/previews/`), así que la geometría no solo se parsea: se dibuja.
-- `tools/gdscript_check.py` valida los 11 scripts con el parser oficial de
+- `tools/gdscript_check.py` valida los 16 scripts con el parser oficial de
   GDScript (`gdtoolkit`) y contrasta cada llamada a la API contra el volcado de
-  la API de Godot 4.4: **0 problemas**.
+  la API de Godot 4.4. También cruza las llamadas y señales **entre las clases
+  del propio proyecto** (que `director.comprar()` exista, que la señal
+  conectada esté declarada, que un `Array[T]` no se rellene con un `Array` sin
+  tipo): **0 problemas**.
 
 Lo que **no** se puede afirmar: que el proyecto arranque en Godot. No había
 Godot en el entorno (GitHub Releases está bloqueado, así que no se pudo
@@ -52,13 +56,16 @@ Requisitos: **Godot 4.4** (estándar, sin C#).
 # 2) o por linea de comandos:
 godot --path . -- --map de_dust2
 godot --path . -- --map de_nuke --arma awp
+godot --path . -- --map de_dust2 --equipo t     # empezar como terrorista
+godot --path . -- --map de_dust2 --rondas 10    # partida de 10 rondas
 ```
 
 Si no pasas `--map`, carga `de_dust2`.
 
 **Controles:** `WASD` mover, `Espacio` saltar, `Ctrl` agachar, `Clic izq.`
-disparar, `R` recargar, `1-5` armas, `Rueda` cambiar de arma, `F1` ayuda,
-`F5` recargar mapa, `Esc` liberar el ratón.
+disparar, `R` recargar, `1-5` armas, `Rueda` cambiar de arma, `B` menú de
+compra, `E` mantener para plantar/desactivar la C4, `F1` ayuda, `F5` reiniciar
+la partida, `Esc` liberar el ratón.
 
 ## 3. Qué hace exactamente
 
@@ -115,6 +122,36 @@ Constantes del motor original, en unidades GoldSrc convertidas a metros:
 dispersión que empeora al moverse o en el aire, perdigones en las escopetas,
 recarga y retroceso con el viewmodel original.
 
+### Modo de juego
+
+Una partida de verdad sobre los `.bsp` originales, con los tiempos del 1.5:
+
+| Pieza | Valor |
+|---|---|
+| Congelación (compra) | 6 s |
+| Ronda | 300 s (`mp_roundtime 5`) |
+| Fin de ronda | 5 s (`mp_chattime`) |
+| Plantar C4 | 3 s dentro de un `func_bomb_target` |
+| Explosivo | 35 s (`mp_c4timer`), 40 en el 1.6 |
+| Desactivar | 10 s, 5 s con kit |
+| Daño de la explosión | 200, cayendo con la distancia hasta ~12,5 m |
+
+Fin de ronda: eliminación del bando contrario, tiempo agotado (ganan los CT),
+bomba que explota (ganan los T) o bomba desactivada (ganan los CT). Se compra
+en la zona de `func_buyzone` con el menú numérico del original (`B`, `1-8` para
+categoría, `0` para volver), y solo durante la congelación.
+
+Economía de 1.5: 800 $ de salida, tope 16 000 $, 3250 $ por ronda ganada por
+eliminación o tiempo, 3500 $ si la ronda se decidió con la bomba, 300 $ por
+baja (1500 $ con cuchillo, 150 $ con AWP), 300 $ por plantar o desactivar y
+bono de derrota de 1400/1900/2400/2900 $ según las rondas perdidas seguidas.
+Si sobrevives la ronda **conservas armas, chaleco y granadas**; si mueres
+vuelves con cuchillo y pistola (USP si eres CT, Glock si eres T).
+
+> Todo esto sigue **sin ejecutar en Godot**, como el resto de la escena. Lo
+> que está comprobado es que compila, que las llamadas entre scripts existen y
+> que las constantes son las del 1.5.
+
 ## 4. Estructura
 
 ```
@@ -132,7 +169,12 @@ scripts/
   viewmodel.gd          arma en primera persona con balanceo y retroceso
   audio.gd              reproduccion de los .wav originales
   fx.gd                 impactos y trazadoras
-  hud.gd                mira, vida, chaleco, municion, arma, FPS
+  hud.gd                mira, vida, chaleco, municion, arma, FPS, reloj
+  actor_model.gd        modelos animados de los .mdl, con vida y muerte
+  economy.gd            precios, recompensas y bonos del 1.5 (puro, sin nodos)
+  bomb.gd               C4: cuenta atras, pitidos, desactivacion, explosion
+  match_director.gd     rondas, economia, objetivos y fin de ronda
+  buy_menu.gd           menu de compra numerico estilo original
 
 shaders/brush.gdshader  textura + lightmap sin luces dinamicas
 assets/                 material original de Valve (local, no se publica)

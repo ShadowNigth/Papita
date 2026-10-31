@@ -10,6 +10,15 @@ var arma: String = ""
 var mensaje: String = ""
 var mostrar_ayuda: bool = true
 
+# --- estado de partida (lo rellena MatchDirector) ---
+var dinero: int = 800
+var ronda: int = 1
+var marcador: String = "CT 0 — 0 T"
+var fase: String = "Congelación"
+var tiempo_ronda: float = 0.0
+var tiempo_bomba: float = -1.0
+var aviso_bomba: String = ""
+
 var _fuente: Font
 var _tiempo_mensaje: float = 0.0
 
@@ -72,7 +81,7 @@ func _draw() -> void:
 	if mostrar_ayuda:
 		var lineas := [
 			"WASD mover   ESPACIO saltar   CTRL agachar   CLIC disparar   R recargar",
-			"1-5 armas   RUEDA cambiar   ESC liberar raton   F1 ocultar esta ayuda",
+			"1-5 armas   RUEDA cambiar   B comprar   E plantar/desactivar   F1 ayuda",
 			"Mapa y soldados leidos de los .bsp/.mdl originales, con sus animaciones",
 		]
 		var alto := tam.y - 132.0
@@ -81,11 +90,45 @@ func _draw() -> void:
 
 	_dibujar_texto(Vector2(28, 28), "%d FPS" % Engine.get_frames_per_second(), 12, Color(0.7, 0.9, 0.7, 0.8))
 
+	# --- marcador arriba al centro: CT / tiempo / T, como el original ---
+	var reloj := _mmss(tiempo_ronda)
+	var ancho_reloj := _fuente.get_string_size(reloj, HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x
+	_texto_caja(Vector2(centro.x - 90, 14), 180, marcador, 15, Color(0.85, 0.9, 0.95))
+	_dibujar_texto(Vector2(centro.x - ancho_reloj * 0.5, 46), reloj, 22,
+		Color(1.0, 0.4, 0.35) if tiempo_ronda < 30.0 else Color(0.95, 0.95, 0.95))
+	_dibujar_texto(Vector2(centro.x - _fuente.get_string_size(fase, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x * 0.5, 70),
+		fase, 12, Color(0.65, 0.7, 0.75))
+
+	# --- dinero, debajo de la salud ---
+	_dibujar_texto(Vector2(28, tam.y - 92), "%d$" % dinero, 20, Color(0.65, 0.95, 0.65))
+
+	# --- estado de la bomba, si la hay ---
+	if tiempo_bomba >= 0.0:
+		var txt := "BOMBA %s" % _mmss(tiempo_bomba)
+		var ancho_b := _fuente.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
+		_dibujar_texto(Vector2(centro.x - ancho_b * 0.5, 96), txt, 18,
+			Color(1.0, 0.35, 0.25) if tiempo_bomba < 10.0 else Color(1.0, 0.7, 0.3))
+	if not aviso_bomba.is_empty():
+		var ancho_a := _fuente.get_string_size(aviso_bomba, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+		_dibujar_texto(Vector2(centro.x - ancho_a * 0.5, tam.y - 150), aviso_bomba, 14,
+			Color(1.0, 0.9, 0.5))
+
 
 func _dibujar_texto(pos: Vector2, texto: String, tam_fuente: int, color: Color) -> void:
 	# sombra a 1 px para que se lea sobre cualquier textura, como en el original
 	draw_string(_fuente, pos + Vector2(1, 1), texto, HORIZONTAL_ALIGNMENT_LEFT, -1, tam_fuente, Color(0, 0, 0, color.a * 0.8))
 	draw_string(_fuente, pos, texto, HORIZONTAL_ALIGNMENT_LEFT, -1, tam_fuente, color)
+
+
+static func _mmss(segundos: float) -> String:
+	var s := maxi(0, int(segundos))
+	return "%d:%02d" % [int(s / 60.0), s % 60]
+
+
+func _texto_caja(pos: Vector2, ancho: float, texto: String, tam: int, color: Color) -> void:
+	draw_rect(Rect2(pos.x, pos.y - 2, ancho, 22), Color(0.05, 0.06, 0.08, 0.75))
+	var w := _fuente.get_string_size(texto, HORIZONTAL_ALIGNMENT_LEFT, -1, tam).x
+	_dibujar_texto(Vector2(pos.x + (ancho - w) * 0.5, pos.y + 14), texto, tam, color)
 
 
 func _buscar_jugador() -> CsPlayer:

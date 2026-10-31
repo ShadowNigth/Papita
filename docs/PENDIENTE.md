@@ -47,21 +47,49 @@ escribir navegación propia. La opción razonable es usar los `clipnodes` y las
 hojas del `.bsp` para construir un grafo de puntos de navegación, en vez de
 inventar un NavMesh sobre geometría ya particionada.
 
+Desde el modo de juego sí hacen de **contrario**: tienen vida, reciben daño,
+mueren, sueltan el cadáver y la ronda se cierra cuando no queda ninguno vivo.
+Lo que no hacen: disparar al jugador ni moverse con criterio.
+
 ## 4. Granadas y C4
 
-`player.gd` tiene el hueco marcado con un `TODO`: al equipar una granada no pasa
-nada. Falta:
+La C4 **está implementada** (`scripts/bomb.gd`): se planta manteniendo `E`
+durante 3 s dentro de un `func_bomb_target`, cuenta atrás de 35 s con pitidos
+que se aceleran, luz roja intermitente y explosión de 200 de daño a menos de
+12,5 m. Se desactiva manteniendo `E` 10 s (5 s con kit) y el progreso se pierde
+al soltar.
+
+Las **granadas** siguen sin lanzarse. Ahora se compran, se cuentan aparte
+(`player.granadas`, máximo 4 de cada tipo) y no se "equipan" como arma, pero no
+hay proyectil. Falta:
 
 - Física de proyectil (`RigidBody3D` con rebote, `he_bounce1.wav`).
 - Explosión con daño radial y caída por distancia.
 - Flashbang: cegado por línea de visión y ángulo.
-- C4: plantado, cuenta atrás de 35 s (CS 1.5), defusing con kit/no kit.
+- Humo (`smokegrenade`).
 
 ## 5. Modo de juego
 
-No hay rondas, ni economía, ni compra, ni equipos: solo un mapa con un jugador
-que puede disparar a la pared. Falta el director de partida (rondas, dinero,
-condiciones de victoria) y el menú de compra con las teclas del original.
+Hecho (`scripts/match_director.gd`, `economy.gd`, `buy_menu.gd`): congelación,
+rondas de 5 minutos, marcador, economía con bono de derrota, menú de compra con
+teclas numéricas, victoria por eliminación / tiempo / bomba. **Sin ejecutar.**
+
+Lo que falta o está a medias:
+
+- **Equipos**: hay dos bandos, pero el jugador es el único que juega. No existe
+  spawn por equipo real: los `info_player_start` del `.bsp` son genéricos y se
+  reaparece siempre en el primer punto guardado.
+- **Rehenes**: `cs_office` y `cs_italy` tienen `hostage_entity` y
+  `func_hostage_rescue`; se leen las zonas pero no hay lógica de rehenes
+  (`CsEconomy` ya tiene el importe del rescate).
+- **Bots que disparen**: ver §3.
+- **Mitad de tiempo / cambio de bando** (`mp_halftime`).
+- **Pausa de compra fuera de la congelación**: en el original se puede comprar
+  también el primer segundo y medio de la ronda; aquí solo en congelación.
+- **`mp_maxrounds`** existe en el código (`--rondas N`), pero no hay pantalla de
+  fin de partida: solo un mensaje de texto.
+- **Cuchillo cuerpo a cuerpo**: `knife` tiene ficha en `weapon_db.gd`, pero no
+  hay animación de ataque ni `trace` corto; dispara como si fuera un arma.
 
 ## 6. La paleta
 
@@ -86,4 +114,5 @@ Half-Life se resuelve copiando el fichero.
 - Animación de esqueleto (RLE + slerp + skinning GPU) y 215 secuencias
   comprobadas con movimiento real.
 - Render de validación (planos de mapas y vistas de modelos) en `docs/previews/`.
-- Comprobación de la API de Godot 4.4 en los 11 scripts.
+- Comprobación de la API de Godot 4.4 en los 16 scripts, incluidas las llamadas
+  y señales entre clases del propio proyecto (`tools/gdscript_check.py`).

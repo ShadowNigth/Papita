@@ -32,6 +32,9 @@ var info_mapa: Dictionary = {}
 var _nodo_mapa: Node3D
 var _actores: Array[ActorModel] = []
 var _actores_meta: Array[Dictionary] = []
+var director: MatchDirector
+var menu_compra: BuyMenu
+var equipo_jugador: String = "ct"
 
 ## Cuantos soldados animados se colocan (0 = ninguno). Se puede cambiar con
 ## `--actores N` en la linea de comandos.
@@ -63,6 +66,17 @@ func _leer_argumentos() -> void:
 			"--secuencia":
 				if i + 1 < args.size():
 					set_meta("secuencia_forzada", args[i + 1])
+			"--equipo":
+				if i + 1 < args.size():
+					equipo_jugador = args[i + 1].to_lower()
+			"--rondas":
+				if i + 1 < args.size():
+					set_meta("max_rondas", int(args[i + 1]))
+
+
+## Equipo valido (por si el argumento viene mal escrito).
+func _equipo_valido() -> String:
+	return equipo_jugador if equipo_jugador in ["ct", "t"] else "ct"
 
 
 func cargar_mapa(id: String) -> void:
@@ -73,6 +87,18 @@ func cargar_mapa(id: String) -> void:
 
 	if _nodo_mapa != null and is_instance_valid(_nodo_mapa):
 		_nodo_mapa.queue_free()
+	# Al recargar (F5) hay que tirar la partida anterior: si no, quedarian dos
+	# directores y dos menus de compra vivos a la vez.
+	if director != null and is_instance_valid(director):
+		director.queue_free()
+		director = null
+	if menu_compra != null and is_instance_valid(menu_compra):
+		var capa := menu_compra.get_parent()
+		if capa != null:
+			capa.queue_free()
+		else:
+			menu_compra.queue_free()
+		menu_compra = null
 
 	bsp = BspReader.cargar(RAIZ_MAPAS + String(MAPAS[id]), paleta)
 	if not bsp.errores.is_empty():
@@ -91,18 +117,23 @@ func cargar_mapa(id: String) -> void:
 	_colocar_jugador()
 	_colocar_actores()
 	_crear_hud()
+	_crear_director()
 	_crear_fondo()
 
 
 func _colocar_jugador() -> void:
 	if jugador != null and is_instance_valid(jugador):
 		jugador.queue_free()
-	var spawns: Array[Vector3] = info_mapa.get("spawns", [])
+	# assign() convierte el Array sin tipo del Dictionary a Array[Vector3];
+	# una asignacion directa es error de ejecucion en Godot 4.
+	var spawns: Array[Vector3] = []
+	spawns.assign(info_mapa.get("spawns", []))
 	var origen := Vector3(0, 2, 0)
 	if not spawns.is_empty():
 		origen = spawns[randi() % spawns.size()] + Vector3(0, 0.4, 0)
 	jugador = CsPlayer.new()
 	jugador.name = "jugador"
+	jugador.equipo = _equipo_valido()
 	jugador.add_to_group("jugador")
 	jugador.position = origen
 	add_child(jugador)
@@ -127,7 +158,10 @@ func _colocar_actores() -> void:
 	if num_actores <= 0:
 		return
 
-	var spawns: Array[Vector3] = info_mapa.get("spawns", [])
+	# assign() convierte el Array sin tipo del Dictionary a Array[Vector3];
+	# una asignacion directa es error de ejecucion en Godot 4.
+	var spawns: Array[Vector3] = []
+	spawns.assign(info_mapa.get("spawns", []))
 	if spawns.is_empty():
 		return
 	var facciones := ["gign", "sas", "urban", "gsg9", "terror", "leet", "arctic", "guerilla"]
@@ -142,6 +176,7 @@ func _colocar_actores() -> void:
 		if not ok:
 			actor.queue_free()
 			continue
+		actor.equipo = "t" if _equipo_valido() == "ct" else "ct"
 		var destino := spawns[randi() % spawns.size()]
 		actor.position = destino + Vector3(0, 0.1, 0)
 		add_child(actor)
@@ -193,10 +228,103 @@ func _mover_actores(delta: float) -> void:
 
 
 func _punto_aleatorio() -> Vector3:
-	var spawns: Array[Vector3] = info_mapa.get("spawns", [])
+	# assign() convierte el Array sin tipo del Dictionary a Array[Vector3];
+	# una asignacion directa es error de ejecucion en Godot 4.
+	var spawns: Array[Vector3] = []
+	spawns.assign(info_mapa.get("spawns", []))
 	if spawns.is_empty():
 		return Vector3.ZERO
 	return spawns[randi() % spawns.size()]
+
+
+## Crea el director de partida (rondas, economía, objetivos) y el menú de compra.
+func _crear_director() -> void:
+	director = MatchDirector.new()
+	director.name = "director"
+	add_child(director)
+	# `info_mapa` es un Dictionary sin tipos: asignar su Array a un
+	# Array[Dictionary] directamente da error en ejecucion, hay que copiar.
+	var zonas_bomba: Array[Dictionary] = []
+	for z in info_mapa.get("zonas_bomba", []):
+		zonas_bomba.append(z)
+	var zonas_compra: Array[Dictionary] = []
+	for z in info_mapa.get("zonas_compra", []):
+		zonas_compra.append(z)
+	director.max_rondas = int(get_meta("max_rondas", 0))
+	# Las senales se conectan ANTES de configurar(): configurar() ya arranca la
+	# primera ronda y sus mensajes tienen que llegar al HUD.
+	jugador.baja_confirmada.connect(_on_baja)
+	director.mensaje.connect(_on_mensaje)
+	director.dinero_cambiado.connect(_on_dinero)
+	director.estado_cambiado.connect(_on_estado_partida)
+	director.ronda_iniciada.connect(_on_ronda_iniciada)
+	director.ronda_terminada.connect(_on_ronda_terminada)
+	director.partida_terminada.connect(_on_partida_terminada)
+	director.configurar(jugador, _actores, zonas_bomba, zonas_compra, _equipo_valido())
+
+	menu_compra = BuyMenu.new()
+	menu_compra.name = "menu_compra"
+	menu_compra.director = director
+	var capa := CanvasLayer.new()
+	capa.name = "capa_compra"
+	capa.layer = 2
+	add_child(capa)
+	capa.add_child(menu_compra)
+
+
+func _on_estado_partida(estado: int, restante: float) -> void:
+	if hud == null or not is_instance_valid(hud):
+		return
+	hud.tiempo_ronda = restante
+	hud.marcador = director.marcador()
+	match estado:
+		MatchDirector.Estado.CONGELACION:
+			hud.fase = "Congelación · compra (B)"
+		MatchDirector.Estado.EN_JUEGO:
+			hud.fase = "En juego"
+		MatchDirector.Estado.BOMBA_PLANTADA:
+			hud.fase = "Bomba plantada"
+		MatchDirector.Estado.FIN_RONDA:
+			hud.fase = "Fin de ronda"
+	if director.bomba != null and is_instance_valid(director.bomba) and director.bomba.activa:
+		hud.tiempo_bomba = director.bomba.restante
+	else:
+		hud.tiempo_bomba = -1.0
+
+
+func _on_baja(_arma: String) -> void:
+	if director != null and is_instance_valid(director):
+		director.registrar_baja(_arma)
+
+
+func _on_mensaje(texto: String) -> void:
+	if hud != null and is_instance_valid(hud):
+		hud.aviso(texto, 2.5)
+
+
+func _on_dinero(cantidad: int) -> void:
+	if hud != null and is_instance_valid(hud):
+		hud.dinero = cantidad
+
+
+func _on_ronda_iniciada(numero: int) -> void:
+	# Al morir se libera el raton; la ronda nueva lo vuelve a capturar salvo que
+	# el menu de compra este abierto.
+	if menu_compra == null or not menu_compra.abierto:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	if hud != null and is_instance_valid(hud):
+		hud.ronda = numero
+	print("[papita] ronda ", numero, " | ", director.marcador())
+
+
+func _on_ronda_terminada(ganador: String, motivo: String) -> void:
+	print("[papita] gana ", ganador, " (", motivo, ") | ", director.marcador())
+
+
+func _on_partida_terminada(resultado: String) -> void:
+	print("[papita] fin de la partida: ", resultado)
+	if hud != null and is_instance_valid(hud):
+		hud.aviso("Fin de la partida · " + resultado, 10.0)
 
 
 func _crear_hud() -> void:
@@ -228,6 +356,10 @@ func _crear_fondo() -> void:
 
 
 func _unhandled_input(evento: InputEvent) -> void:
+	if evento.is_action_pressed("comprar") and menu_compra != null:
+		# BuyMenu se encarga del raton; el jugador sigue congelado por el director.
+		menu_compra.alternar()
+		return
 	if evento.is_action_pressed("reiniciar_mapa"):
 		cargar_mapa(mapa_actual)
 	elif evento.is_action_pressed("ui_cancel"):
@@ -245,6 +377,9 @@ func _crear_acciones() -> void:
 		"saltar": [KEY_SPACE],
 		"agacharse": [KEY_CTRL],
 		"disparar": [KEY_NONE],
+		# plantar/desactivar la C4 (el director consulta esta accion)
+		"usar": [KEY_E],
+		"comprar": [KEY_B],
 	}
 	for accion in mapa:
 		if InputMap.has_action(accion):

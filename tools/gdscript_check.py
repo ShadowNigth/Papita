@@ -33,6 +33,126 @@ RE_CLASE_METODO = re.compile(r"\b([A-Z][A-Za-z0-9_]*)\.([a-z_][a-z0-9_]*)\s*\(")
 RE_CLASE_CONST = re.compile(r"\b([A-Z][A-Za-z0-9_]*)\.([A-Z][A-Z0-9_]{2,})\b")
 RE_PRELOAD = re.compile(r'preload\(\s*"(res://[^"]+)"\s*\)')
 RE_EXTENDS = re.compile(r"^extends\s+([A-Za-z0-9_]+)", re.MULTILINE)
+RE_CLASS_NAME = re.compile(r"^class_name\s+(\w+)", re.MULTILINE)
+RE_FUNC = re.compile(r"^func\s+(\w+)\s*\(", re.MULTILINE)
+RE_SIGNAL = re.compile(r"^signal\s+(\w+)", re.MULTILINE)
+RE_VAR_TIPADA = re.compile(r"^var\s+(\w+)\s*:\s*(\w+)", re.MULTILINE)
+
+
+# Metodos heredados de Object/Node/Node3D/RefCounted que nunca se declaran
+# en el script y por tanto no son errores.
+METODOS_NATIVOS = {
+    "new", "free", "queue_free", "duplicate", "get", "set", "has", "call",
+    "callv", "call_deferred", "emit_signal", "connect", "disconnect", "is_valid",
+    "is_connected", "has_method", "has_signal", "get_meta", "set_meta", "has_meta",
+    "remove_meta", "add_to_group", "remove_from_group", "is_in_group",
+    "add_child", "remove_child", "get_node", "get_parent", "find_child",
+    "find_children", "get_owner", "set_owner", "is_inside_tree", "get_tree",
+    "get_viewport", "get_world_3d", "instance_from_id", "get_instance_id",
+    "notification", "to_string", "get_class", "is_class", "set_process",
+    "set_physics_process", "set_process_input", "get_signal_list",
+    "get_method_list", "get_property_list", "get_script", "set_script",
+}
+
+
+def metodos_por_clase(ficheros: list[Path]) -> dict[str, set[str]]:
+    """Nombre de clase -> metodos declarados, para cruzar llamadas entre scripts."""
+    salida: dict[str, set[str]] = {}
+    for f in ficheros:
+        texto = f.read_text(encoding="utf-8")
+        m = RE_CLASS_NAME.search(texto)
+        nombre = m.group(1) if m else f.stem.capitalize()
+        salida[nombre] = set(RE_FUNC.findall(texto))
+    return salida
+
+
+SEÑALES_NATIVAS = {
+    "timeout", "pressed", "toggled", "body_entered", "body_exited",
+    "area_entered", "area_exited", "finished", "animation_finished",
+    "value_changed", "item_selected", "text_submitted", "text_changed",
+}
+
+
+def senales_por_clase(ficheros: list[Path]) -> dict[str, set[str]]:
+    salida: dict[str, set[str]] = {}
+    for f in ficheros:
+        texto = f.read_text(encoding="utf-8")
+        m = RE_CLASS_NAME.search(texto)
+        salida[m.group(1) if m else f.stem.capitalize()] = set(RE_SIGNAL.findall(texto))
+    return salida
+
+
+def comprobar_manejadores(ficheros: list[Path]) -> int:
+    """`.connect(_on_algo)` donde _on_algo no esta declarado en el fichero."""
+    problemas = 0
+    for f in ficheros:
+        texto = f.read_text(encoding="utf-8")
+        declaradas = set(RE_FUNC.findall(texto))
+        for i, linea in enumerate(texto.splitlines(), 1):
+            if linea.lstrip().startswith("#"):
+                continue
+            for m in re.finditer(r"\.connect\(\s*([A-Za-z_]\w*)\s*\)", linea):
+                if m.group(1) not in declaradas:
+                    print(f"{f.relative_to(ROOT)}:{i}: MANEJADOR -> {m.group(1)}() no declarado")
+                    problemas += 1
+    return problemas
+
+
+def comprobar_arrays_tipados(ficheros: list[Path]) -> int:
+    """`var x: Array[T] = dicc.get(...)`: el Dictionary devuelve un Array sin
+    tipo y Godot lanza error de ejecucion al asignarlo."""
+    problemas = 0
+    patron = re.compile(r"^\s*var\s+(\w+)\s*:\s*Array\[[^\]]+\]\s*=\s*[\w.]+\s*\.\s*get\(",
+                        re.MULTILINE)
+    for f in ficheros:
+        for i, linea in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            if linea.lstrip().startswith("#"):
+                continue
+            if patron.match(linea):
+                print(f"{f.relative_to(ROOT)}:{i}: ARRAY -> asignacion sin copiar "
+                      "(usa `x.assign(dicc.get(...))` o copia a mano)")
+                problemas += 1
+    return problemas
+
+
+def comprobar_senales(ficheros: list[Path], senales: dict[str, set[str]]) -> int:
+    """`variable.senal.connect()` sobre una clase del proyecto: la senal debe
+    estar declarada en esa clase o ser nativa de Godot."""
+    problemas = 0
+    for f in ficheros:
+        texto = f.read_text(encoding="utf-8")
+        variables = [(n, t) for n, t in RE_VAR_TIPADA.findall(texto) if t in senales]
+        for var, tipo in variables:
+            for senal in re.findall(r"\b%s\.(\w+)\.connect\(" % re.escape(var), texto):
+                if senal in senales[tipo] or senal in SEÑALES_NATIVAS:
+                    continue
+                print(f"{f.relative_to(ROOT)}: SENAL -> {var}: {tipo}.{senal} no declarada")
+                problemas += 1
+    return problemas
+
+
+def comprobar_llamadas_entre_clases(ficheros: list[Path],
+                                     clases: dict[str, set[str]]) -> int:
+    """Detecta `variable.metodo()` donde la variable esta tipada con una clase
+    del proyecto y ese metodo no existe. Es el error tipico al dividir el juego
+    en varios scripts (y el unico que el parser no puede ver)."""
+    problemas = 0
+    for f in ficheros:
+        texto = f.read_text(encoding="utf-8")
+        variables = [(n, t) for n, t in RE_VAR_TIPADA.findall(texto) if t in clases]
+        # tambien parametros tipados: func f(x: Clase)
+        for tipo, nombre in re.findall(r"\b(\w+)\s*:\s*(\w+)\b(?=\s*[,)])", texto):
+            if nombre in clases:
+                variables.append((tipo, nombre))
+        for var, tipo in variables:
+            for metodo in re.findall(r"\b%s\.(\w+)\s*\(" % re.escape(var), texto):
+                if metodo not in clases[tipo]:
+                    # los metodos de Object (new, free...) no estan en la clase
+                    if metodo in METODOS_NATIVOS:
+                        continue
+                    print(f"{f.relative_to(ROOT)}: CRUCE -> {var}: {tipo}.{metodo}() no existe")
+                    problemas += 1
+    return problemas
 
 
 def cargar_api() -> dict:
@@ -149,6 +269,17 @@ def main() -> int:
             if base not in clases and base not in nombres_clase and base != "RefCounted":
                 print(f"{nombre}: EXTENDS -> clase base desconocida '{base}'")
                 problemas += 1
+
+    # 5) llamadas entre clases del proyecto
+    clases_proyecto = metodos_por_clase(ficheros)
+    problemas += comprobar_llamadas_entre_clases(ficheros, clases_proyecto)
+
+    # 6) senales declaradas antes de conectarse
+    problemas += comprobar_senales(ficheros, senales_por_clase(ficheros))
+
+    # 7) manejadores de senal y arrays tipados desde Dictionary
+    problemas += comprobar_manejadores(ficheros)
+    problemas += comprobar_arrays_tipados(ficheros)
 
     print(f"\n{len(ficheros)} scripts revisados, {problemas} problemas")
     return 0 if problemas == 0 else 1

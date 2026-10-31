@@ -59,6 +59,10 @@ var luz_ofs: int = 0
 var luz_len: int = 0
 
 var errores: Array[String] = []
+## Brush models (lump 14). El lump NO lleva contador: son dmodel_t de 64 bytes
+## seguidos. El modelo 0 es el mundo; el resto son los "model *N" de las
+## entidades (zonas de bomba, buyzones, puertas...).
+var modelos: Array[AABB] = []
 
 
 static func cargar(ruta_bsp: String, paleta: CsPalette) -> BspReader:
@@ -90,6 +94,7 @@ func _leer(paleta: CsPalette) -> void:
 			errores.append("lump %d fuera de rango" % i)
 
 	_leer_entidades()
+	_leer_modelos()
 	_leer_vertices()
 	_leer_texinfo()
 	_leer_texturas(paleta)
@@ -155,6 +160,66 @@ static func origin_de(e: Dictionary) -> Vector3:
 
 
 const ESCALA := 0.025
+
+
+# --- brush models y zonas ---------------------------------------------------
+func _leer_modelos() -> void:
+	var ofs := lumps_ofs[LUMP_MODELOS]
+	var ln := lumps_len[LUMP_MODELOS]
+	if ofs <= 0 or ln < 64:
+		return
+	var n := ln / 64
+	for i in n:
+		var base := ofs + i * 64
+		var mn := Vector3(datos.decode_float(base), datos.decode_float(base + 4),
+			datos.decode_float(base + 8))
+		var mx := Vector3(datos.decode_float(base + 12), datos.decode_float(base + 16),
+			datos.decode_float(base + 20))
+		modelos.append(AABB(_a_godot(mn), _a_godot(mx) - _a_godot(mn)))
+
+
+## Convierte un punto de GoldSrc a coordenadas de Godot (sin escalar; la escala
+## ya la aplican los vertices). GoldSrc: +Z arriba, +Y norte.
+static func _a_godot(v: Vector3) -> Vector3:
+	return Vector3(v.x, v.z, -v.y) * ESCALA
+
+
+## Caja de una entidad brush ("model" "*N"), en coordenadas de Godot.
+func caja_entidad(e: Dictionary) -> AABB:
+	var texto := String(e.get("model", ""))
+	if not texto.begins_with("*"):
+		return AABB()
+	var idx := int(texto.substr(1))
+	if idx < 0 or idx >= modelos.size():
+		return AABB()
+	return modelos[idx]
+
+
+## Zonas de una clase ("func_bomb_target", "func_buyzone",
+## "func_hostage_rescue") como [{nombre, caja}].
+func zonas(clase: String) -> Array[Dictionary]:
+	var salida: Array[Dictionary] = []
+	var n := 0
+	for e in entidades_de(clase):
+		var caja := caja_entidad(e)
+		if caja.size == Vector3.ZERO:
+			continue
+		n += 1
+		salida.append({
+			"nombre": String(e.get("targetname", "%s%d" % [clase, n])),
+			"caja": caja,
+		})
+	return salida
+
+
+## Indice de la zona que contiene el punto, o -1. Estatica a proposito: quien
+## pregunta (el director de partida) ya tiene la lista de zonas, no el BSP.
+static func posicion_en_zona(pos: Vector3, lista: Array[Dictionary]) -> int:
+	for i in lista.size():
+		var caja: AABB = lista[i]["caja"]
+		if caja.has_point(pos):
+			return i
+	return -1
 
 
 # --- geometria -------------------------------------------------------------

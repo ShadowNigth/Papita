@@ -10,6 +10,8 @@ extends CharacterBody3D
 signal arma_cambiada(id: String)
 signal disparo(impacto: Vector3, impacto_valido: bool)
 signal estado_actualizado(vida: int, chaleco: int, cargador: int, reserva: int)
+signal murio
+signal baja_confirmada(arma: String)
 
 const UNIDAD := 0.025
 const VEL_CAMINAR := 250.0 * UNIDAD        # 6.25 m/s
@@ -27,12 +29,22 @@ const ALTURA_CAPSULA_AGACHADO := 36.0 * UNIDAD
 
 var vida: int = 100
 var chaleco: int = 0
+var casco: bool = false
+var tiene_kit: bool = false
+## "ct" o "t": decide la pistola de salida y el color del modelo.
+var equipo: String = "ct"
+var dinero: int = 800
+var vivo: bool = true
+var congelado: bool = false
 var velocidad_mira := 2.2
 
 var camara: Camera3D
 var viewmodel: CsViewmodel
 
 var armas: Array[String] = []
+## Granadas compradas, por tipo y cantidad. No son armas: en el original van en
+## una lista aparte y se lanzan con sus propias teclas, nunca se "equipan".
+var granadas: Dictionary = {}
 var arma_actual: String = ""
 var cargador: int = 0
 var reserva: int = 0
@@ -105,6 +117,14 @@ func _unhandled_input(evento: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if not vivo:
+		# muerto: se deja quieto, sin entrada, pero la gravedad sigue actuando
+		velocity.x = 0.0
+		velocity.z = 0.0
+		velocity.y -= GRAVEDAD * delta
+		move_and_slide()
+		return
+
 	_tiempo_disparo = maxf(0.0, _tiempo_disparo - delta)
 	_retroceso = maxf(0.0, _retroceso - delta * 6.0)
 	if _recargando:
@@ -112,16 +132,23 @@ func _physics_process(delta: float) -> void:
 		if _tiempo_recarga <= 0.0:
 			_terminar_recarga()
 
-	_agachado = Input.is_action_pressed("agacharse")
+	_agachado = Input.is_action_pressed("agacharse") and not congelado
 	var altura_objetivo := ALTURA_OJOS_AGACHADO if _agachado else ALTURA_OJOS
 	_altura_ojos = lerpf(_altura_ojos, altura_objetivo, delta * 12.0)
 	camara.position.y = _altura_ojos
 
-	_mover(delta)
+	if not congelado:
+		_mover(delta)
+	else:
+		# congelado: se frena en seco, como el freezetime del original
+		velocity.x = 0.0
+		velocity.z = 0.0
+		velocity.y -= GRAVEDAD * delta
+		move_and_slide()
 
-	if Input.is_action_pressed("disparar"):
+	if Input.is_action_pressed("disparar") and not congelado:
 		_intentar_disparar()
-	if Input.is_action_just_pressed("saltar") and is_on_floor() and not _agachado:
+	if Input.is_action_just_pressed("saltar") and is_on_floor() and not _agachado and not congelado:
 		velocity.y = SALTO
 		_ruido.reproducir("player/pl_jump1.wav", -12.0)
 
@@ -187,6 +214,10 @@ func equipar(id: String) -> void:
 	_recargando = false
 	viewmodel.equipar(datos.get("viewmodel", ""))
 	arma_cambiada.emit(id)
+
+
+func _granadas_de(id: String) -> int:
+	return int(granadas.get(id, 0))
 
 
 func _ciclar_arma(direccion: int) -> void:
@@ -269,6 +300,17 @@ func _disparar_rayo(danio: float, dispersion: float) -> void:
 	var punto: Vector3 = resultado["position"]
 	var normal: Vector3 = resultado["normal"]
 	Fx.impacto(get_parent(), punto, normal, danio)
+
+	# Si le dimos a un soldado, lo herimos. El raycast devuelve el collider,
+	# que es su caja de golpe (no el nodo del modelo).
+	var collider = resultado.get("collider")
+	if collider != null and collider.has_meta("actor"):
+		var actor = collider.get_meta("actor")
+		if actor != null and is_instance_valid(actor):
+			var murio_antes: bool = not actor.vivo
+			actor.recibir_danio(danio, punto)
+			if not murio_antes and not actor.vivo:
+				baja_confirmada.emit(arma_actual)
 	disparo.emit(punto, true)
 
 
@@ -297,8 +339,13 @@ func _recargar() -> void:
 		return
 	_recargando = true
 	_tiempo_recarga = 2.4
-	var sonido := String(datos.get("tipo", ""))
-	_ruido.reproducir("weapons/357_reload1.wav" if sonido == "pistola" else "weapons/ak47_clipout.wav", -10.0)
+	var tipo := String(datos.get("tipo", ""))
+	if tipo == "pistola":
+		_ruido.reproducir("weapons/clipout1.wav", -10.0)
+	elif tipo == "escopeta":
+		_ruido.reproducir("weapons/m3_insertshell.wav", -10.0)
+	else:
+		_ruido.reproducir("weapons/ak47_clipout.wav", -10.0)
 
 
 func _terminar_recarga() -> void:
@@ -314,3 +361,118 @@ func _terminar_recarga() -> void:
 
 func _actualizar_estado() -> void:
 	estado_actualizado.emit(vida, chaleco, cargador, reserva)
+
+
+# ------------------------------------------------------------ vida y compra
+## Daño recibido. El chaleco absorbe parte y el casco protege la cabeza
+## (que aqui no se distingue: todo el cuerpo es una capsula).
+func recibir_danio(cantidad: float, _origen: Vector3 = Vector3.ZERO) -> void:
+	if not vivo or cantidad <= 0.0:
+		return
+	var restante := cantidad
+	if chaleco > 0:
+		var absorbido := minf(float(chaleco), restante * 0.5)
+		chaleco -= int(absorbido)
+		restante -= absorbido
+	vida -= int(maxf(1.0, restante))
+	if vida <= 0:
+		vida = 0
+		vivo = false
+		_ruido.reproducir("player/pl_die1.wav", 0.0)
+		congelado = true
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		murio.emit()
+
+
+## Vuelve a estar vivo conservando el equipo: en el 1.5, sobrevivir la ronda
+## mantiene armas, chaleco, casco, kit y granadas para la siguiente.
+func revivir() -> void:
+	vida = 100
+	vivo = true
+	congelado = false
+
+
+## Pierde todo y vuelve al equipo de salida (cuchillo y pistola).
+func perder_equipo() -> void:
+	armas.clear()
+	granadas.clear()
+	chaleco = 0
+	casco = false
+	tiene_kit = false
+	# Pistola de salida segun el bando: USP para CT, Glock para T.
+	var pistola := "usp45" if equipo == "ct" else "glock18"
+	if WeaponDB.existe("knife"):
+		armas.append("knife")
+	if WeaponDB.existe(pistola):
+		armas.append(pistola)
+	equipar(arma_de_reserva())
+
+
+## Arma con la que se reaparece: la primera que no sea el cuchillo.
+func arma_de_reserva() -> String:
+	for id in armas:
+		if id != "knife":
+			return id
+	return "knife" if armas.has("knife") else ""
+
+
+## Reaparece en `pos`. `conservar_equipo` distingue al que sobrevivio (true) del
+## que murio o empieza la partida (false).
+func reaparecer(pos: Vector3, conservar_equipo: bool = true) -> void:
+	revivir()
+	global_position = pos
+	velocity = Vector3.ZERO
+	if not conservar_equipo:
+		perder_equipo()
+	elif not armas.is_empty():
+		equipar(armas[0])
+
+
+## Compra un arma o equipamiento. Devuelve false si no se pudo.
+func comprar(id: String) -> bool:
+	if CsEconomy.precio(id) == 0 and not WeaponDB.existe(id) and not CsEconomy.EQUIPO.has(id):
+		return false
+	# equipamiento
+	if id == "kevlar":
+		if chaleco >= 100:
+			return false      # ya lo llevas puesto
+		chaleco = 100
+		return true
+	if id == "kevlar_casco":
+		if chaleco >= 100 and casco:
+			return false      # ya lo llevas puesto
+		chaleco = 100
+		casco = true
+		return true
+	if id == "kit":
+		tiene_kit = true
+		return true
+	# granadas y armas
+	if WeaponDB.existe(id):
+		var datos := WeaponDB.obtener(id)
+		var tipo := String(datos.get("tipo", ""))
+		if tipo == "granada":
+			if _granadas_de(id) >= 4:
+				return false  # cuatro de cada tipo, como en el 1.5
+			granadas[id] = _granadas_de(id) + 1
+			return true
+		if tipo == "pistola":
+			if armas.size() >= 6:
+				return false
+			armas.append(id)
+			equipar(id)
+			return true
+		# primaria: sustituye la que hubiera de ese tipo
+		var primarias := ["fusil", "subfusil", "escopeta", "francotirador", "ametralladora"]
+		if tipo in primarias:
+			for otra in armas.duplicate():
+				if String(WeaponDB.obtener(otra).get("tipo", "")) in primarias:
+					armas.erase(otra)
+			armas.append(id)
+			equipar(id)
+			return true
+		armas.append(id)
+		equipar(id)
+		return true
+	return false
+

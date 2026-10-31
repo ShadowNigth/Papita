@@ -23,6 +23,12 @@ var velocidad: float = 1.0
 var bucle: bool = true
 var errores: Array[String] = []
 
+## Vida y estado de combate. El actor es un blanco simple: no dispara.
+var vida: int = 100
+var vivo: bool = true
+var equipo: String = "t"
+var _golpe: StaticBody3D
+
 
 func cargar(fichero: String, paleta: CsPalette) -> bool:
 	var ruta := RAIZ_MODELOS + fichero
@@ -47,7 +53,24 @@ func cargar(fichero: String, paleta: CsPalette) -> bool:
 	# calculan desde las poses de reposo del propio esqueleto.
 	instancia.skin = esqueleto.create_skin_from_rest_transforms()
 	_enganchar_esqueleto()
+	_crear_caja_de_golpe()
 	return true
+
+
+## Caja invisible para que los rayos del jugador acierten al soldado. Se marca
+## con `actor` en los metadatos para que `player.gd` sepa a quien hirio.
+func _crear_caja_de_golpe() -> void:
+	_golpe = StaticBody3D.new()
+	_golpe.name = "golpe"
+	_golpe.set_meta("actor", self)
+	var forma := CollisionShape3D.new()
+	var capsula := CapsuleShape3D.new()
+	capsula.height = 1.7
+	capsula.radius = 0.35
+	forma.shape = capsula
+	forma.position.y = 0.85
+	_golpe.add_child(forma)
+	add_child(_golpe)
 
 
 func _enganchar_esqueleto() -> void:
@@ -100,15 +123,49 @@ func animar_por_velocidad(metros_por_segundo: float, agachado: bool = false) -> 
 		reproducir("run", clampf(metros_por_segundo / 5.0, 0.8, 1.5))
 
 
+## Daño recibido del jugador.
+func recibir_danio(cantidad: float, _punto: Vector3 = Vector3.ZERO) -> void:
+	if not vivo:
+		return
+	# los headshots no se distinguen: la caja es una capsula entera
+	vida -= int(maxf(1.0, cantidad * 1.6))
+	if vida <= 0:
+		vida = 0
+		vivo = false
+		if _golpe != null:
+			_golpe.collision_layer = 0
+			_golpe.collision_mask = 0
+		morir()
+		var temporizador := get_tree().create_timer(6.0)
+		temporizador.timeout.connect(_ocultar_cadaver)
+
+
+func _ocultar_cadaver() -> void:
+	visible = false
+
+
+## Vuelve a estar vivo al empezar la ronda.
+func revivir() -> void:
+	vivo = true
+	vida = 100
+	visible = true
+	if _golpe != null:
+		_golpe.collision_layer = 1
+		_golpe.collision_mask = 1
+	reproducir("idle1")
+
+
 func morir() -> void:
-	var vivos := ["death1", "death2", "death3"]
-	var elegido := vivos[randi() % vivos.size()]
-	for nombre in vivos:
-		if lector.indice_secuencia(nombre) < 0:
-			continue
-		elegido = nombre
-		break
-	reproducir(elegido, 1.0, false)
+	if lector == null:
+		return
+	# Las tres muertes del original; se elige una al azar de las que existan.
+	var disponibles: Array[String] = []
+	for nombre in ["death1", "death2", "death3", "crouch_die"]:
+		if lector.indice_secuencia(nombre) >= 0:
+			disponibles.append(nombre)
+	if disponibles.is_empty():
+		return
+	reproducir(disponibles[randi() % disponibles.size()], 1.0, false)
 
 
 func secuencias_disponibles() -> PackedStringArray:

@@ -80,6 +80,11 @@ static func construir(bsp: BspReader) -> Dictionary:
 		"spawns": bsp.puntos_de_aparicion(),
 		"bomb_targets": _origenes(bsp, "func_bomb_target"),
 		"rehenes": _origenes(bsp, "hostage_entity"),
+		# Zonas reales (caja del brush model), que es lo que usa el juego para
+		# saber si estas plantando o comprando.
+		"zonas_bomba": bsp.zonas("func_bomb_target"),
+		"zonas_compra": bsp.zonas("func_buyzone"),
+		"zonas_rescate": bsp.zonas("func_hostage_rescue"),
 		"superficies": superficies.size(),
 		"triangulos": triangulos_colision.size() / 3,
 	}

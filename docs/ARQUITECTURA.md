@@ -37,6 +37,8 @@ arrancar. Nada que reimportar.
      afecta a los modelos: la geometría es `unshaded` y usa el lightmap).
 5. Coloca al jugador en un spawn leído del lump de entidades.
 6. Crea el HUD y captura el ratón.
+7. `_crear_director()` arranca la partida: `MatchDirector` recibe el jugador,
+   los actores y las zonas de bomba y compra que saca `MapBuilder` del `.bsp`.
 
 ## Decisiones
 
@@ -74,6 +76,31 @@ por hueso que se aplica con `set_bone_pose()`; el `Skin` lo resuelve en la GPU.
 `actor_model.gd` es el nodo que encadena eso con el estado del juego:
 `animar_por_velocidad()` elige entre `idle1`, `walk`, `crouchrun` y `run` según
 los metros por segundo, y `morir()` reproduce una de las tres muertes.
+
+## Modo de juego
+
+`match_director.gd` es el único que decide cuándo empieza y acaba una ronda; los
+demás nodos no saben en qué estado está la partida, solo reaccionan a sus
+señales (`ronda_iniciada`, `ronda_terminada`, `estado_cambiado`, `mensaje`).
+
+```
+CONGELACION --(6 s)--> EN_JUEGO --(bomba)--> BOMBA_PLANTADA
+     ^                    |                       |
+     |                    v                       v
+     +--------------- FIN_RONDA  <---------- (explota / se desactiva)
+```
+
+- Cada 5 s de `FIN_RONDA` se lanza `_iniciar_ronda()`: resucita al jugador y a
+  los actores, y devuelve a cada uno a su punto de aparición. Si murió pierde
+  el equipo; si sobrevivió lo conserva, como en el original.
+- Las zonas no son inventadas: `func_bomb_target` y `func_buyzone` son brushes.
+  `BspReader.caja_entidad()` busca su `model "*N"` y devuelve la caja del brush
+  model ya en metros; `posicion_en_zona()` comprueba un punto contra esas cajas.
+- `economy.gd` no tiene nodos ni estado: son funciones puras, para poder
+  razonarlas aparte. `bomb.gd` concentra toda la cuenta atrás y el daño.
+- El HUD **no** consulta al director: `game.gd` copia cada cuadro los valores
+  (reloj, marcador, dinero, fase, tiempo de bomba) a campos del HUD. Así el HUD
+  sigue pudiendo dibujarse sin partida, por ejemplo en la pantalla de prueba.
 
 ## Los tres niveles de verificación
 
