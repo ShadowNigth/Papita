@@ -1,0 +1,78 @@
+name: Pruebas continuas de Godot
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: godot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validar:
+    name: Godot 4.7.2 + validadores
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GODOT_VERSION: "4.7.2"
+      # SHA-256 publicado en los metadatos de la release oficial de Godot.
+      GODOT_SHA256: cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4
+
+    steps:
+      - name: Obtener el repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar caché del motor
+        run: mkdir -p "$HOME/.cache/godot/$GODOT_VERSION"
+
+      - name: Restaurar caché de Godot
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/godot/${{ env.GODOT_VERSION }}
+          key: godot-${{ runner.os }}-${{ env.GODOT_VERSION }}-linux-x86_64
+
+      - name: Descargar Godot oficial si falta
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot_dir="$HOME/.cache/godot/$GODOT_VERSION"
+          godot_file="Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          if [[ ! -x "$godot_dir/godot" ]]; then
+            archive="$RUNNER_TEMP/godot-linux-x86_64.zip"
+            url="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/${godot_file}.zip"
+            curl --fail --location --retry 3 --retry-delay 2 "$url" --output "$archive"
+            printf '%s  %s\n' "$GODOT_SHA256" "$archive" | sha256sum --check
+            unzip -q "$archive" -d "$godot_dir"
+            chmod +x "$godot_dir/$godot_file"
+            ln -sfn "$godot_dir/$godot_file" "$godot_dir/godot"
+          fi
+          echo "$godot_dir" >> "$GITHUB_PATH"
+          "$godot_dir/godot" --version
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-test.txt
+
+      - name: Instalar dependencias de validación
+        run: python -m pip install --disable-pip-version-check -r requirements-test.txt
+
+      - name: Analizar scripts y arrancar la escena principal con ocho modelos
+        run: tools/godot_smoke_test.sh
+
+      - name: Validar formatos, navegación y lógica de juego
+        run: |
+          python tools/gdscript_check.py
+          python tools/cs15_validate.py --no-render
+          python tools/partida_validate.py
+          python tools/nav_validate.py
+          python tools/bots_validate.py
+          python tools/doors_validate.py

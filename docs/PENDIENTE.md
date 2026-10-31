@@ -3,14 +3,18 @@
 Lista honesta de lo que no está hecho o no está probado. Ordenada por lo que más
 se nota al abrir el juego.
 
-## 1. Que arranque en Godot (bloqueante)
+## 1. Validar el arranque y una partida en Godot (bloqueante)
 
-El proyecto **no se ha ejecutado nunca**. Se escribió en un entorno sin Godot
-(GitHub Releases bloqueado, sin forma de descargar el editor), y se validó de
-forma estática: sintaxis con `gdtoolkit`, API contra el volcado de Godot 4.4 y
-la lógica de parseo replicada en Python contra los assets reales.
+El usuario ya inició el proyecto en Godot 4.7.2 y fue reportando errores de
+parseo y ejecución durante la carga; se corrigieron los hallazgos informados,
+pero aún falta confirmar una partida completa y el comportamiento de juego.
+Este entorno del agente no trae Godot y la descarga de Releases redirige a un
+host fuera de su lista de descargas permitidas. Se agregó
+`.github/workflows/godot-ci.yml`: en cada push/PR ejecutará el arranque headless
+y los validadores estáticos. El primer resultado de ese workflow todavía está
+pendiente; no se presenta como prueba pasada.
 
-Lo más probable que haya que tocar en la primera ejecución:
+Aspectos que aún requieren una prueba funcional completa:
 
 - **Nombres de señales del HUD**: `hud.gd` accede a `jugador._retroceso`, un
   miembro privado. Funciona, pero es feo: convendría una señal.
@@ -46,9 +50,11 @@ Lo que falta para que se vean *bien* en juego:
 Hecho (`scripts/bot_ai.gd` + `scripts/nav_grid.gd`): los bots **ven** (campo de
 visión + rayo de línea de visión), **apuntan** con el error del arma y de la
 dificultad, **disparan** en ráfagas, recargan, se mueven de lado en combate y
-**navegan** por un grafo extraído del árbol BSP. Todo esto está escrito pero
-**no ejecutado en Godot**. En Python se ha validado el grafo, las transiciones
-de escaleras y el modelo de puntería; no equivale a probar una partida.
+**navegan** por un grafo extraído del árbol BSP. Se inició el juego en Godot,
+pero todavía no se ha validado una partida completa ni el comportamiento de
+los bots; la prueba headless de inicio está automatizada en GitHub Actions. En
+Python se ha validado el grafo, las transiciones de escaleras y el modelo de
+puntería; no equivale a probar una partida.
 
 Las escaleras de mano (`func_ladder`) tienen soporte **parcial**: de 34 triggers
 repartidos por los mapas, 20 forman una subida validada en `cs_assault`,

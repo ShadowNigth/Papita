@@ -22,13 +22,13 @@ spawns y el círculo naranja el sitio de bomba A/B.*
 | Lector `.bsp` v30 (geometría, texturas, lightmaps, entidades) | **validado** contra los 10 mapas |
 | Lector `.mdl` v10 (mallas, huesos, bind pose, secuencias) | **validado** contra los 96 modelos |
 | Animación de esqueletos (RLE, interpolación, skinning GPU) | **validado**: 215 secuencias con movimiento real |
-| Construcción del mapa en Godot (malla + colisión + atlas de luz) | escrito, **sin ejecutar** |
-| Jugador, armas, audio, HUD | escrito, **sin ejecutar** |
-| Modo de juego: rondas, economía, compra, C4 | escrito, **sin ejecutar** |
+| Construcción del mapa en Godot (malla + colisión + atlas de luz) | implementada; falta validar el flujo completo de carga |
+| Jugador, armas, audio, HUD | implementados; falta probar las interacciones en partida |
+| Modo de juego: rondas, economía, compra, C4 | implementado; falta validación funcional completa |
 | Grafo de navegación sacado del `.bsp` | **validado** en los 10 mapas; 20 subidas por escalera verificadas (Python) |
-| Puertas `func_door` / `func_door_rotating` | implementadas con movimiento y apertura por proximidad; 27 brush models validados estáticamente, **sin ejecutar en Godot** |
-| IA de los bots: ver, apuntar, disparar y moverse | escrita, **sin ejecutar** |
-| Compilar el motor Godot | **no disponible en el entorno donde se escribió** |
+| Puertas `func_door` / `func_door_rotating` | implementadas; 27 brush models validados estáticamente, falta probar su comportamiento en una partida |
+| IA de los bots: ver, apuntar, disparar y moverse | escrita; falta validar una partida completa en Godot |
+| Arranque real en Godot 4.7.2 | prueba headless automatizada configurada en GitHub Actions; primer resultado pendiente |
 
 Lo que sí está comprobado, y cómo:
 
@@ -44,15 +44,17 @@ Lo que sí está comprobado, y cómo:
   conectada esté declarada, que un `Array[T]` no se rellene con un `Array` sin
   tipo): **0 problemas**.
 
-Lo que **no** se puede afirmar: que el proyecto arranque en Godot. No había
-Godot en el entorno (GitHub Releases está bloqueado, así que no se pudo
-descargar) y no se ha podido pulsar F5 ni una vez. Espera retoques de primera
-ejecución; `docs/PENDIENTE.md` lista lo que falta y lo que es probable que haya
-que ajustar.
+El usuario ya ejecutó el proyecto en Godot 4.7.2 y reportó errores de carga que
+se fueron corrigiendo; eso todavía no equivale a validar una partida completa.
+El entorno de este agente no puede descargar el binario de Releases: GitHub
+redirige el archivo a un host fuera de su lista de descargas permitidas. Para
+poder repetir la prueba, `.github/workflows/godot-ci.yml` prepara un runner
+headless con la versión oficial 4.7.2. Su primer resultado aún está pendiente;
+no se afirma que el workflow ya haya pasado.
 
 ## 2. Arrancar
 
-Requisitos: **Godot 4.4** (estándar, sin C#).
+Requisitos: **Godot 4.4 o superior** (estándar, sin C#). La prueba automática usa Godot 4.7.2.
 
 ```bash
 # 1) importar: abre Godot -> Import -> project.godot -> F5
@@ -201,9 +203,10 @@ bono de derrota de 1400/1900/2400/2900 $ según las rondas perdidas seguidas.
 Si sobrevives la ronda **conservas armas, chaleco y granadas**; si mueres
 vuelves con cuchillo y pistola (USP si eres CT, Glock si eres T).
 
-> Todo esto sigue **sin ejecutar en Godot**, como el resto de la escena. Lo
-> que está comprobado es que compila, que las llamadas entre scripts existen y
-> que las constantes son las del 1.5.
+> Todavía falta validar una partida completa y la interacción de estas
+> mecánicas. El usuario ya inició el proyecto en Godot 4.7.2 y reportó errores
+> de carga; la prueba automática de arranque está en `.github/workflows/godot-ci.yml`.
+> Las comprobaciones Python no sustituyen una prueba dentro del motor.
 
 ## 4. Estructura
 
@@ -265,10 +268,10 @@ game/valve/gfx/palette.lmp
 (Los assets de Half-Life no se incluyen: son de Valve y este repositorio no los
 redistribuye. Ver `docs/AVISO_LEGAL.md`.)
 
-## 6. Verificar sin Godot
+## 6. Validación estática (Python, sin Godot)
 
 ```bash
-pip install numpy pillow gdtoolkit
+python3 -m pip install -r requirements-test.txt
 python3 tools/cs15_validate.py    # 96 modelos + 10 mapas + PNGs
 python3 tools/partida_validate.py # modo de juego: constantes, precios, economia
 python3 tools/nav_validate.py     # grafo de navegacion de los 10 mapas + PNGs
@@ -315,11 +318,38 @@ problemas: 0
 sale de `[0, 16000]` y que el bono de derrota escala como en el original. No
 prueba el motor: prueba los números y la aritmética.
 
+## 7. Prueba de integración en Godot
+
+`.github/workflows/godot-ci.yml` configura una máquina Linux headless que:
+
+- descarga Godot **4.7.2 oficial**, comprueba el SHA-256 publicado por Godot y
+  conserva el binario en la caché de GitHub Actions entre ejecuciones;
+- importa/analiza el proyecto y arranca `scenes/main.tscn` con ocho bots. Eso
+  carga los ocho modelos animados y pasa por el lector real `.mdl`, incluido
+  el mapeo de UV que generó el último fallo;
+- ejecuta después los validadores de mapas, modelos, navegación, puertas, bots
+  y lógica de partida.
+
+Se dispara en cada push y pull request, se puede lanzar manualmente y además
+corre semanalmente. El runner es efímero (GitHub no deja una máquina encendida
+permanentemente), pero el workflow y la caché reutilizable del motor quedan
+asociados al repositorio; si GitHub desalojara la caché, se vuelve a descargar.
+Para correr la prueba de arranque en una
+máquina que ya tenga Godot instalado:
+
+```bash
+GODOT_BIN=/ruta/a/Godot_v4.7.2-stable_linux.x86_64 tools/godot_smoke_test.sh
+```
+
+El workflow quedó configurado, pero falta su primer resultado real de GitHub
+Actions; hasta entonces no se declara verde ni se afirma que Godot haya pasado
+la prueba automática.
+
 Las 46 secuencias que no se mueven son las **poses de apuntado** (`ref_aim_*`,
 `crouch_aim_*`): tienen 1-2 cuadros idénticos porque el juego las mezcla con
 los *blends* de arma, y los modelos de arma (`p_*`, `w_*`), que no se animan.
 
-## 7. Documentación
+## 8. Documentación
 
 - [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) — cómo se lee cada formato y por qué.
 - [`docs/PENDIENTE.md`](docs/PENDIENTE.md) — qué falta, por orden de importancia.
@@ -327,7 +357,7 @@ los *blends* de arma, y los modelos de arma (`p_*`, `w_*`), que no se animan.
 - [`docs/FORMATOS.md`](docs/FORMATOS.md) — los structs del `.bsp` y del `.mdl`, campo a campo.
 - [`docs/AVISO_LEGAL.md`](docs/AVISO_LEGAL.md) — licencias y qué no se publica.
 
-## 8. Licencia
+## 9. Licencia
 
 Código y documentación: **GPLv3** ([`LICENSE`](LICENSE)).
 Los assets (`.bsp`, `.mdl`, `.wav`) son de **Valve Corporation** y **no** están
