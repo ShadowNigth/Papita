@@ -90,17 +90,25 @@ func _validar_juego() -> void:
 	juego.director.tiempo_estado = 60.0
 	jugador.congelado = false
 	jugador.collision_mask = 0
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	var fallos_movimiento: Array[String] = []
 	for mapeo in ACCIONES_MOVIMIENTO:
 		var accion := String(mapeo[0])
 		jugador.velocity = Vector3.ZERO
 		var inicio := Vector2(jugador.global_position.x, jugador.global_position.z)
 		Input.action_press(accion)
+		if accion == "adelante":
+			print("[godot jugabilidad debug] action=%s strength=%.2f congelado=%s vivo=%s physics=%s state=%d" % [
+				accion, Input.get_action_strength(accion), jugador.congelado, jugador.vivo,
+				jugador.is_physics_processing(), juego.director.estado])
 		for _i in 16:
 			await physics_frame
 		Input.action_release(accion)
 		var fin := Vector2(jugador.global_position.x, jugador.global_position.z)
 		var desplazamiento := inicio.distance_to(fin)
+		if accion == "adelante":
+			print("[godot jugabilidad debug] pos %.3f,%.3f -> %.3f,%.3f; velocidad=%s congelado=%s" % [
+				inicio.x, inicio.y, fin.x, fin.y, jugador.velocity, jugador.congelado])
 		if desplazamiento > 0.05:
 			print("[godot jugabilidad] %s movio %.2f m" % [accion, desplazamiento])
 		else:
