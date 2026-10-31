@@ -116,3 +116,5 @@ Half-Life se resuelve copiando el fichero.
 - Render de validación (planos de mapas y vistas de modelos) en `docs/previews/`.
 - Comprobación de la API de Godot 4.4 en los 16 scripts, incluidas las llamadas
   y señales entre clases del propio proyecto (`tools/gdscript_check.py`).
+- Constantes, precios y aritmética del modo de juego contrastados con el 1.5 y
+  economía simulada en 200 rondas (`tools/partida_validate.py`).

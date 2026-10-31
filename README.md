@@ -215,7 +215,8 @@ redistribuye. Ver `docs/AVISO_LEGAL.md`.)
 ```bash
 pip install numpy pillow gdtoolkit
 python3 tools/cs15_validate.py    # 96 modelos + 10 mapas + PNGs
-python3 tools/gdscript_check.py   # sintaxis, API de 4.4 y rutas
+python3 tools/partida_validate.py # modo de juego: constantes, precios, economia
+python3 tools/gdscript_check.py   # sintaxis, API de 4.4, cruces entre scripts
 ```
 
 Salida actual:
@@ -223,8 +224,20 @@ Salida actual:
 ```
 modelos: 96/96 sin problemas     mapas: 10/10 ok     problemas de formato: 0
 animaciones: 215/261 secuencias evaluadas se mueven (0 problemas)
-12 scripts revisados, 0 problemas
+
+== MODO DE JUEGO ==
+  constantes y precios del 1.5 contrastados
+  economica simulada en 200 rondas sin salirse de [0, 16000]
+  problemas: 0
+
+16 scripts revisados, 0 problemas
 ```
+
+`partida_validate.py` lee las constantes de `economy.gd`, `match_director.gd` y
+`bomb.gd` y las contrasta con el manual del 1.5 (dinero, bonos, precios,
+`mp_c4timer`); después simula partidas largas para comprobar que el dinero no se
+sale de `[0, 16000]` y que el bono de derrota escala como en el original. No
+prueba el motor: prueba los números y la aritmética.
 
 Las 46 secuencias que no se mueven son las **poses de apuntado** (`ref_aim_*`,
 `crouch_aim_*`): tienen 1-2 cuadros idénticos porque el juego las mezcla con
