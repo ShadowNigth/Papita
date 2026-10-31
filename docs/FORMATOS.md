@@ -86,6 +86,27 @@ Por cara: se calcula la caja de los vértices en coordenadas de luxel
 de luz). La UV de luz de un vértice es su posición en luxeles normalizada a esa
 caja.
 
+### Árbol BSP: `dplane_t`, `dnode_t`, `dleaf_t` (lumps 1, 5 y 10)
+
+Es lo que permite preguntar "¿este punto es sólido?" sin tocar el motor de
+física, y de ahí sale el grafo de navegación de los bots.
+
+| Estructura | Lump | Tamaño | Campos que se usan |
+|---|---|---|---|
+| `dplane_t` | 1 | 20 B | normal (3 float), dist (float), tipo (int32) |
+| `dnode_t` | 5 | 24 B | planenum (int32), children[2] (int16 ×2), caja, firstface/numfaces |
+| `dleaf_t` | 10 | 28 B | contents (int32), visofs, caja, marcas de superficie |
+
+El recorrido es el de Quake: se empieza en el nodo 0 y en cada uno se calcula
+`dot(normal, p) - dist`; si es ≥ 0 se baja por `children[0]` y si no por
+`children[1]`. Un hijo negativo es una hoja: `contents` vale **-1 vacío**,
+**-2 sólido** y **-3 agua**. Lo que queda fuera del mapa es sólido, igual que
+en el original.
+
+> Ojo con el lump 14 (`dmodel_t`, 64 B): el rango de caras del **mundo** está
+> en los bytes 56 y 60 (`firstface`, `numfaces`), no al principio. Las caras de
+> los modelos `*N` vienen después.
+
 ## 2. `.mdl` StudioModel (versión 10)
 
 ### `studiohdr_t` (los offsets que importan)

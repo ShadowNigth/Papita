@@ -157,9 +157,8 @@ func _colocar_jugador() -> void:
 		jugador.equipar("glock18")
 
 
-## Coloca soldados animados de las facciones originales. Se mueven en linea
-## recta entre puntos aleatorios del mapa (no hay navegacion todavia), asi que
-## pueden atravesar paredes: es una demo de animacion, no IA.
+## Coloca los bots de las facciones originales. La IA que los mueve se crea
+## aparte, en _crear_bots(), porque necesita el grafo de navegacion y al jugador.
 func _colocar_actores() -> void:
 	for a in _actores:
 		if is_instance_valid(a):
