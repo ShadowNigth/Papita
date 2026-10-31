@@ -72,12 +72,20 @@ func _validar_juego() -> void:
 
 	for mapeo in ACCIONES_MOVIMIENTO:
 		var accion := String(mapeo[0])
+		var codigo := int(mapeo[1])
 		if not InputMap.has_action(accion):
 			_fallar("Falta la accion de movimiento '%s'" % accion)
 			return
+		var evento_tecla := InputEventKey.new()
+		evento_tecla.keycode = codigo
+		evento_tecla.physical_keycode = codigo
+		evento_tecla.pressed = true
+		if not evento_tecla.is_action_pressed(accion):
+			_fallar("La tecla de movimiento no esta asignada a '%s'" % accion)
+			return
 
-	# Aisla esta prueba de una pared o del freezetime: sigue recorriendo el
-	# _physics_process real con eventos de teclado y sin colision del mapa.
+	# Aisla esta prueba de una pared o del freezetime: recorre el _physics_process
+	# real con acciones sinteticas, pero sin colision del mapa.
 	juego.director.estado = MatchDirector.Estado.EN_JUEGO
 	juego.director.tiempo_estado = 60.0
 	jugador.congelado = false
@@ -85,18 +93,12 @@ func _validar_juego() -> void:
 	var fallos_movimiento: Array[String] = []
 	for mapeo in ACCIONES_MOVIMIENTO:
 		var accion := String(mapeo[0])
-		var codigo := int(mapeo[1])
 		jugador.velocity = Vector3.ZERO
 		var inicio := Vector2(jugador.global_position.x, jugador.global_position.z)
-		var tecla := InputEventKey.new()
-		tecla.physical_keycode = codigo
-		tecla.pressed = true
-		Input.parse_input_event(tecla)
+		Input.action_press(accion)
 		for _i in 16:
 			await physics_frame
-		var soltar := InputEventKey.new()
-		soltar.physical_keycode = codigo
-		Input.parse_input_event(soltar)
+		Input.action_release(accion)
 		var fin := Vector2(jugador.global_position.x, jugador.global_position.z)
 		var desplazamiento := inicio.distance_to(fin)
 		if desplazamiento > 0.05:
