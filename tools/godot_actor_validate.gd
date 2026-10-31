@@ -39,8 +39,10 @@ func _validar_modelos() -> void:
 			return
 		await process_frame
 		var caja_local: AABB = actor.instancia.get_aabb()
-		var caja_mundo: AABB = actor.instancia.global_transform * caja_local
+		var transformacion: Transform3D = actor.instancia.global_transform
+		var caja_mundo: AABB = transformacion * caja_local
 		var altura: float = caja_mundo.size.y
+		print("[godot mdl debug] %s: local=%s global=%s mundo=%s" % [faccion, caja_local.size, transformacion, caja_mundo.size])
 		print("[godot mdl] %s: altura visual %.2f m" % [faccion, altura])
 		if altura < ALTURA_MINIMA or altura > ALTURA_MAXIMA:
 			push_error("Escala/ejes incorrectos en %s: altura %.2f m" % [faccion, altura])
